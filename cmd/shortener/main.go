@@ -22,11 +22,11 @@ func run() error {
 }
 
 func encodeHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "text/plain" {
-		log.Println("Invalid content-type, expected string")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+	//if r.Header.Get("Content-Type") != "text/plain" {
+	//	log.Println("Invalid content-type, expected string")
+	//	w.WriteHeader(http.StatusBadRequest)
+	//	return
+	//}
 
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -58,11 +58,11 @@ func encodeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func decodeHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "text/plain" {
-		log.Println("Invalid content-type, expected string")
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+	//if r.Header.Get("Content-Type") != "text/plain" {
+	//	log.Println("Invalid content-type, expected string")
+	//	w.WriteHeader(http.StatusBadRequest)
+	//	return
+	//}
 
 	shortURI := r.PathValue("id")
 	longURI, err := base64.StdEncoding.DecodeString(shortURI)
@@ -72,9 +72,4 @@ func decodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Location", string(longURI))
 	w.WriteHeader(http.StatusTemporaryRedirect)
-	if _, err := w.Write(longURI); err != nil {
-		log.Println("Could not write URI: ", shortURI)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
 }
