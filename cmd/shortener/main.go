@@ -39,8 +39,7 @@ func encodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if _, err = url.ParseRequestURI(string(body[:])); err != nil {
 		if len(body) == 0 {
-			log.Println("No data received")
-			w.WriteHeader(http.StatusBadRequest)
+			w.WriteHeader(http.StatusCreated)
 			return
 		}
 		log.Println("Could not parse URI: ", err)
@@ -71,6 +70,7 @@ func decodeHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Println("Could not decode URI: ", err)
 	}
+	w.Header().Set("Location", string(longURI))
 	w.WriteHeader(http.StatusTemporaryRedirect)
 	if _, err := w.Write(longURI); err != nil {
 		log.Println("Could not write URI: ", shortURI)
