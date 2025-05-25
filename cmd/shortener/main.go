@@ -63,12 +63,12 @@ func decodeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortURI := r.PathValue("id")
-	log.Println("PathValue:", shortURI)
 	longURI, err := base64.StdEncoding.DecodeString(shortURI)
 
 	if err != nil {
 		log.Println("Could not decode URI: ", err)
 	}
+	w.WriteHeader(http.StatusTemporaryRedirect)
 	if _, err := w.Write(longURI); err != nil {
 		log.Println("Could not write URI: ", shortURI)
 		w.WriteHeader(http.StatusInternalServerError)
