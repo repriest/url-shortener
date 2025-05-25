@@ -17,7 +17,7 @@ func main() {
 func run() error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /", encodeHandler)
-	mux.HandleFunc("GET /{id}/", decodeHandler)
+	mux.HandleFunc("GET /{id}", decodeHandler)
 	return http.ListenAndServe("localhost:8080", mux)
 }
 
@@ -38,6 +38,11 @@ func encodeHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("New request received:", string(body))
 
 	if _, err = url.ParseRequestURI(string(body[:])); err != nil {
+		if len(body) == 0 {
+			log.Println("No data received")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		log.Println("Could not parse URI: ", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -46,13 +51,11 @@ func encodeHandler(w http.ResponseWriter, r *http.Request) {
 	shortURI := base64.StdEncoding.EncodeToString(body)
 	w.WriteHeader(http.StatusCreated)
 
-	if _, err := w.Write([]byte(r.Host + "/" + shortURI)); err != nil {
+	if _, err := w.Write([]byte("http://" + r.Host + "/" + shortURI)); err != nil {
 		log.Println("Could not write URI: ", shortURI)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	return
 }
 
 func decodeHandler(w http.ResponseWriter, r *http.Request) {
