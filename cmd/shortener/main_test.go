@@ -42,18 +42,16 @@ func Test_encodeHandler(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodPost, myAddr, strings.NewReader(tc.body))
+			req := httptest.NewRequest(http.MethodPost, myAddr, strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
+			encodeHandler(rec, req)
 
-			encodeHandler(rec, request)
 			resp := rec.Result()
-			assert.Equal(t, tc.statusCode, resp.StatusCode)
-
-			defer resp.Body.Close()
-
 			respBody, err := io.ReadAll(resp.Body)
+			defer resp.Body.Close()
 			require.NoError(t, err)
 
+			assert.Equal(t, tc.statusCode, resp.StatusCode)
 			assert.Equal(t, tc.response, string(respBody))
 
 		})
@@ -95,7 +93,7 @@ func TestDecodeHandler(t *testing.T) {
 			mux.ServeHTTP(resp, req)
 
 			assert.Equal(t, tc.statusCode, resp.Code)
-			assert.Equal(t, tc.location, resp.Header().Get("Location"))
+			assert.Equal(t, tc.location, resp.Header().Values("Location")[0])
 		})
 	}
 }

@@ -26,6 +26,8 @@ func run() error {
 
 func encodeHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	
 	if err != nil {
 		log.Println("Error reading body:", err)
 		w.WriteHeader(http.StatusBadRequest)
