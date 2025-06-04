@@ -1,3 +1,67 @@
 package main
 
-func main() {}
+import (
+	"encoding/base64"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+)
+
+var myScheme = "http://"
+var myAddr = "localhost:8080"
+
+func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /", encodeHandler)
+	mux.HandleFunc("GET /{id}", decodeHandler)
+	return http.ListenAndServe(myAddr, mux)
+}
+
+func encodeHandler(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	defer r.Body.Close()
+	
+	if err != nil {
+		log.Println("Error reading body:", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	log.Println("New request received:", string(body))
+
+	if _, err = url.ParseRequestURI(string(body[:])); err != nil {
+		if len(body) == 0 {
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		log.Println("Could not parse URI: ", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	shortURI := base64.StdEncoding.EncodeToString(body)
+	w.WriteHeader(http.StatusCreated)
+
+	if _, err := w.Write([]byte(myScheme + myAddr + "/" + shortURI)); err != nil {
+		log.Println("Could not write URI: ", shortURI)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+}
+
+func decodeHandler(w http.ResponseWriter, r *http.Request) {
+	shortURI := r.PathValue("id")
+	longURI, err := base64.StdEncoding.DecodeString(shortURI)
+	if err != nil {
+		log.Println("Could not decode URI: ", err)
+	}
+
+	http.Redirect(w, r, string(longURI), http.StatusTemporaryRedirect)
+}
