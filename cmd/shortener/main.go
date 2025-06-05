@@ -6,6 +6,8 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+
+	"github.com/go-chi/chi/v5"
 )
 
 var myScheme = "http://"
@@ -18,23 +20,21 @@ func main() {
 }
 
 func run() error {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /", encodeHandler)
-	mux.HandleFunc("GET /{id}", decodeHandler)
-	return http.ListenAndServe(myAddr, mux)
+	r := chi.NewRouter()
+	r.Post("/", encodeHandler)
+	r.Get("/{id}", decodeHandler)
+	return http.ListenAndServe(myAddr, r)
 }
 
 func encodeHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
-	
+
 	if err != nil {
 		log.Println("Error reading body:", err)
-		w.WriteHeader(http.StatusBadRequest)
+		http.Error(w, "can't read body", http.StatusBadRequest)
 		return
 	}
-
-	log.Println("New request received:", string(body))
 
 	if _, err = url.ParseRequestURI(string(body[:])); err != nil {
 		if len(body) == 0 {
@@ -42,7 +42,7 @@ func encodeHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Println("Could not parse URI: ", err)
-		w.WriteHeader(http.StatusBadRequest)
+		http.Error(w, "Could not parse URI", http.StatusBadRequest)
 		return
 	}
 
@@ -51,16 +51,17 @@ func encodeHandler(w http.ResponseWriter, r *http.Request) {
 
 	if _, err := w.Write([]byte(myScheme + myAddr + "/" + shortURI)); err != nil {
 		log.Println("Could not write URI: ", shortURI)
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, "Could not write URI", http.StatusInternalServerError)
 		return
 	}
 }
 
 func decodeHandler(w http.ResponseWriter, r *http.Request) {
-	shortURI := r.PathValue("id")
+	shortURI := chi.URLParam(r, "id")
 	longURI, err := base64.StdEncoding.DecodeString(shortURI)
 	if err != nil {
 		log.Println("Could not decode URI: ", err)
+		http.Error(w, "Could not decode URI", http.StatusBadRequest)
 	}
 
 	http.Redirect(w, r, string(longURI), http.StatusTemporaryRedirect)

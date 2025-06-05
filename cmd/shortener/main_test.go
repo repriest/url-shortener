@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -36,7 +37,7 @@ func Test_encodeHandler(t *testing.T) {
 			name:       "Malformed url",
 			method:     http.MethodPost,
 			body:       "badurl!@#$",
-			response:   "",
+			response:   "Could not parse URI\n",
 			statusCode: http.StatusBadRequest,
 		},
 	}
@@ -59,11 +60,9 @@ func Test_encodeHandler(t *testing.T) {
 }
 
 func TestDecodeHandler(t *testing.T) {
-	// Initialize the multiplexer with application routes
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{id}", decodeHandler)
+	r := chi.NewRouter()
+	r.Get("/{id}", decodeHandler)
 
-	// Define test cases
 	tt := []struct {
 		name       string
 		method     string
@@ -90,7 +89,7 @@ func TestDecodeHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := httptest.NewRecorder()
 			req := httptest.NewRequest(tc.method, tc.path, nil)
-			mux.ServeHTTP(resp, req)
+			r.ServeHTTP(resp, req)
 
 			assert.Equal(t, tc.statusCode, resp.Code)
 			assert.Equal(t, tc.location, resp.Header().Values("Location")[0])
