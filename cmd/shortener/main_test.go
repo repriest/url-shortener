@@ -2,9 +2,11 @@ package main
 
 import (
 	"github.com/go-chi/chi/v5"
+	"github.com/repriest/url-shortener/cmd/shortener/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +14,10 @@ import (
 )
 
 func Test_encodeHandler(t *testing.T) {
+	cfg := &config.Config{
+		ServerAddr: "localhost:8080",
+		BaseURL:    "http://localhost:8080",
+	}
 	tt := []struct {
 		name       string
 		method     string
@@ -30,7 +36,7 @@ func Test_encodeHandler(t *testing.T) {
 			name:       "Normal url",
 			method:     http.MethodPost,
 			body:       "https://google.com",
-			response:   myScheme + myAddr + "/" + "aHR0cHM6Ly9nb29nbGUuY29t",
+			response:   cfg.BaseURL + "/" + "aHR0cHM6Ly9nb29nbGUuY29t",
 			statusCode: http.StatusCreated,
 		},
 		{
@@ -43,9 +49,9 @@ func Test_encodeHandler(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, myAddr, strings.NewReader(tc.body))
+			req := httptest.NewRequest(http.MethodPost, cfg.ServerAddr, strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
-			encodeHandler(rec, req)
+			encodeHandler(cfg)(rec, req)
 
 			resp := rec.Result()
 			respBody, err := io.ReadAll(resp.Body)
@@ -60,8 +66,12 @@ func Test_encodeHandler(t *testing.T) {
 }
 
 func TestDecodeHandler(t *testing.T) {
+	cfg := &config.Config{
+		ServerAddr: "localhost:8080",
+		BaseURL:    "http://localhost:8080",
+	}
 	r := chi.NewRouter()
-	r.Get("/{id}", decodeHandler)
+	r.Get("/{id}", decodeHandler(cfg))
 
 	tt := []struct {
 		name       string
@@ -91,6 +101,8 @@ func TestDecodeHandler(t *testing.T) {
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			r.ServeHTTP(resp, req)
 
+			log.Println("req: ", req)
+			log.Println("resp: ", resp)
 			assert.Equal(t, tc.statusCode, resp.Code)
 			assert.Equal(t, tc.location, resp.Header().Values("Location")[0])
 		})
