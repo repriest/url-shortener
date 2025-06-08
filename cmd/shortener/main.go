@@ -11,8 +11,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-var myScheme = "http://"
-
 func main() {
 	if err := run(); err != nil {
 		log.Fatal(err)
