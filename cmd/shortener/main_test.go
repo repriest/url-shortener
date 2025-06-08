@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -100,9 +99,7 @@ func TestDecodeHandler(t *testing.T) {
 			resp := httptest.NewRecorder()
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			r.ServeHTTP(resp, req)
-
-			log.Println("req: ", req)
-			log.Println("resp: ", resp)
+			
 			assert.Equal(t, tc.statusCode, resp.Code)
 			assert.Equal(t, tc.location, resp.Header().Values("Location")[0])
 		})

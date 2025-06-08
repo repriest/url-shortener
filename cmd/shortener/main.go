@@ -67,8 +67,6 @@ func decodeHandler(cfg *config.Config) http.HandlerFunc {
 			log.Println("Could not decode URI: ", err)
 			http.Error(w, "Could not decode URI", http.StatusBadRequest)
 		}
-		log.Println("shorturi: ", shortURI)
-		log.Println("longuri: ", string(longURI))
 		http.Redirect(w, r, string(longURI), http.StatusTemporaryRedirect)
 	}
 }
