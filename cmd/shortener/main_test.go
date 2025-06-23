@@ -42,7 +42,7 @@ func Test_encodeHandler(t *testing.T) {
 			name:       "Malformed url",
 			method:     http.MethodPost,
 			body:       "badurl!@#$",
-			response:   "Could not parse URI\n",
+			response:   "Could not shorten URL\n",
 			statusCode: http.StatusBadRequest,
 		},
 	}
@@ -50,7 +50,7 @@ func Test_encodeHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, cfg.ServerAddr, strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
-			encodeHandler(cfg)(rec, req)
+			shortenHandler(cfg)(rec, req)
 
 			resp := rec.Result()
 			respBody, err := io.ReadAll(resp.Body)
@@ -70,7 +70,7 @@ func TestDecodeHandler(t *testing.T) {
 		BaseURL:    "http://localhost:8080",
 	}
 	r := chi.NewRouter()
-	r.Get("/{id}", decodeHandler(cfg))
+	r.Get("/{id}", expandHandler(cfg))
 
 	tt := []struct {
 		name       string
@@ -99,7 +99,7 @@ func TestDecodeHandler(t *testing.T) {
 			resp := httptest.NewRecorder()
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			r.ServeHTTP(resp, req)
-			
+
 			assert.Equal(t, tc.statusCode, resp.Code)
 			assert.Equal(t, tc.location, resp.Header().Values("Location")[0])
 		})
