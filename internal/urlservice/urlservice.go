@@ -1,4 +1,4 @@
-package baseurl
+package urlservice
 
 import (
 	"encoding/base64"
