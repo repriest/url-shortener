@@ -66,7 +66,7 @@ func (h *Handler) ExpandHandler(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, string(longURL), http.StatusTemporaryRedirect)
 }
 
-func (h *Handler) ShortenJsonHandler(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 	var req ShortenRequest
 
 	// read body

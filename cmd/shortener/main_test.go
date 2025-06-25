@@ -112,7 +112,7 @@ func TestExpandHandler(t *testing.T) {
 	}
 }
 
-func TestShortenJsonHandler(t *testing.T) {
+func TestShortenJSONHandler(t *testing.T) {
 	cfg := &config.Config{
 		ServerAddr: "localhost:8080",
 		BaseURL:    "http://localhost:8080",
@@ -162,7 +162,7 @@ func TestShortenJsonHandler(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
 
-			h.ShortenJsonHandler(rec, req)
+			h.ShortenJSONHandler(rec, req)
 
 			resp := rec.Result()
 			respBody, err := io.ReadAll(resp.Body)

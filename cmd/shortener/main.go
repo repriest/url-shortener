@@ -32,7 +32,7 @@ func run() error {
 	r := chi.NewRouter()
 	r.Post("/", logger.RequestLogger(h.ShortenHandler))
 	r.Get("/{id}", logger.ResponseLogger(h.ExpandHandler))
-	r.Post("/api/shorten", logger.RequestLogger(h.ShortenJsonHandler))
+	r.Post("/api/shorten", logger.RequestLogger(h.ShortenJSONHandler))
 
 	return http.ListenAndServe(cfg.ServerAddr, r)
 }
