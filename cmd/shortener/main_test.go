@@ -1,9 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"github.com/go-chi/chi/v5"
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/handlers"
+	"github.com/repriest/url-shortener/internal/zipper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -174,4 +177,66 @@ func TestShortenJSONHandler(t *testing.T) {
 			assert.Equal(t, tc.response, string(respBody))
 		})
 	}
+}
+
+func TestGzipCompression(t *testing.T) {
+	cfg := &config.Config{
+		ServerAddr: "localhost:8080",
+		BaseURL:    "http://localhost:8080",
+	}
+	h := handlers.NewHandler(cfg)
+
+	handler := zipper.GzipMiddleware(h.ShortenHandler)
+
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	requestBody := "https://google.com"
+	successBody := "http://localhost:8080/aHR0cHM6Ly9nb29nbGUuY29t"
+
+	// compress test
+	t.Run("sends_gzip", func(t *testing.T) {
+		buf := bytes.NewBuffer(nil)
+		zb := gzip.NewWriter(buf)
+		_, err := zb.Write([]byte(requestBody))
+		require.NoError(t, err)
+		err = zb.Close()
+		require.NoError(t, err)
+
+		r := httptest.NewRequest("POST", srv.URL, buf)
+		r.RequestURI = ""
+		r.Header.Set("Content-Encoding", "gzip")
+
+		resp, err := http.DefaultClient.Do(r)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		defer resp.Body.Close()
+
+		b, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Equal(t, string(b), successBody)
+	})
+
+	// decompress test
+	t.Run("accepts_gzip", func(t *testing.T) {
+		buf := bytes.NewBufferString(requestBody)
+		r := httptest.NewRequest("POST", srv.URL, buf)
+		r.RequestURI = ""
+		r.Header.Set("Accept-Encoding", "gzip")
+
+		resp, err := http.DefaultClient.Do(r)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		defer resp.Body.Close()
+
+		zr, err := gzip.NewReader(resp.Body)
+		require.NoError(t, err)
+
+		b, err := io.ReadAll(zr)
+		require.NoError(t, err)
+
+		require.Equal(t, string(b), successBody)
+	})
 }

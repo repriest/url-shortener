@@ -5,6 +5,7 @@ import (
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/handlers"
 	"github.com/repriest/url-shortener/internal/logger"
+	"github.com/repriest/url-shortener/internal/zipper"
 	"log"
 	"net/http"
 )
@@ -30,9 +31,9 @@ func run() error {
 	// handle with chi
 	h := handlers.NewHandler(cfg)
 	r := chi.NewRouter()
-	r.Post("/", logger.RequestLogger(h.ShortenHandler))
-	r.Get("/{id}", logger.ResponseLogger(h.ExpandHandler))
-	r.Post("/api/shorten", logger.RequestLogger(h.ShortenJSONHandler))
+	r.Post("/", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenHandler)))
+	r.Get("/{id}", logger.ResponseLogger(zipper.GzipMiddleware(h.ExpandHandler)))
+	r.Post("/api/shorten", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenJSONHandler)))
 
 	return http.ListenAndServe(cfg.ServerAddr, r)
 }
