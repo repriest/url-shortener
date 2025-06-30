@@ -6,6 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/handlers"
+	"github.com/repriest/url-shortener/internal/storage"
 	"github.com/repriest/url-shortener/internal/zipper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,10 +19,14 @@ import (
 
 func TestShortenHandler(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddr: "localhost:8080",
-		BaseURL:    "http://localhost:8080",
+		ServerAddr:      "localhost:8080",
+		BaseURL:         "http://localhost:8080",
+		FileStoragePath: "url_store.json",
 	}
-	h := handlers.NewHandler(cfg)
+	st, err := storage.NewStorage(cfg.FileStoragePath)
+	require.NoError(t, err)
+	h := handlers.NewHandler(cfg, st)
+
 	tt := []struct {
 		name       string
 		method     string
@@ -72,10 +77,13 @@ func TestShortenHandler(t *testing.T) {
 
 func TestExpandHandler(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddr: "localhost:8080",
-		BaseURL:    "http://localhost:8080",
+		ServerAddr:      "localhost:8080",
+		BaseURL:         "http://localhost:8080",
+		FileStoragePath: "url_store.json",
 	}
-	h := handlers.NewHandler(cfg)
+	st, err := storage.NewStorage(cfg.FileStoragePath)
+	require.NoError(t, err)
+	h := handlers.NewHandler(cfg, st)
 	r := chi.NewRouter()
 	r.Get("/{id}", h.ExpandHandler)
 
@@ -117,10 +125,13 @@ func TestExpandHandler(t *testing.T) {
 
 func TestShortenJSONHandler(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddr: "localhost:8080",
-		BaseURL:    "http://localhost:8080",
+		ServerAddr:      "localhost:8080",
+		BaseURL:         "http://localhost:8080",
+		FileStoragePath: "url_store.json",
 	}
-	h := handlers.NewHandler(cfg)
+	st, err := storage.NewStorage(cfg.FileStoragePath)
+	require.NoError(t, err)
+	h := handlers.NewHandler(cfg, st)
 
 	tt := []struct {
 		name        string
@@ -181,10 +192,13 @@ func TestShortenJSONHandler(t *testing.T) {
 
 func TestGzipCompression(t *testing.T) {
 	cfg := &config.Config{
-		ServerAddr: "localhost:8080",
-		BaseURL:    "http://localhost:8080",
+		ServerAddr:      "localhost:8080",
+		BaseURL:         "http://localhost:8080",
+		FileStoragePath: "url_store.json",
 	}
-	h := handlers.NewHandler(cfg)
+	st, err := storage.NewStorage(cfg.FileStoragePath)
+	require.NoError(t, err)
+	h := handlers.NewHandler(cfg, st)
 
 	handler := zipper.GzipMiddleware(h.ShortenHandler)
 
