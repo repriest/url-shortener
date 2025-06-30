@@ -5,6 +5,7 @@ import (
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/handlers"
 	"github.com/repriest/url-shortener/internal/logger"
+	"github.com/repriest/url-shortener/internal/storage"
 	"github.com/repriest/url-shortener/internal/zipper"
 	"log"
 	"net/http"
@@ -28,8 +29,14 @@ func run() error {
 		return err
 	}
 
+	// init storage
+	st, err := storage.NewStorage(cfg.FileStoragePath)
+	if err != nil {
+		return err
+	}
+
 	// handle with chi
-	h := handlers.NewHandler(cfg)
+	h := handlers.NewHandler(cfg, st)
 	r := chi.NewRouter()
 	r.Post("/", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenHandler)))
 	r.Get("/{id}", logger.ResponseLogger(zipper.GzipMiddleware(h.ExpandHandler)))

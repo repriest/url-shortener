@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
 	"github.com/repriest/url-shortener/internal/config"
+	"github.com/repriest/url-shortener/internal/storage"
 	"github.com/repriest/url-shortener/internal/urlservice"
 	"io"
 	"net/http"
@@ -11,10 +12,11 @@ import (
 
 type Handler struct {
 	cfg *config.Config
+	st  *storage.Storage
 }
 
-func NewHandler(cfg *config.Config) *Handler {
-	return &Handler{cfg: cfg}
+func NewHandler(cfg *config.Config, st *storage.Storage) *Handler {
+	return &Handler{cfg: cfg, st: st}
 }
 
 type ShortenRequest struct {
@@ -53,6 +55,12 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 	if _, err := w.Write([]byte(h.cfg.BaseURL + "/" + shortURL)); err != nil {
 		http.Error(w, "Could not write URL", http.StatusInternalServerError)
 		return
+	}
+
+	// append entry uuid - shorturl - longurl to file
+	err = h.st.AddNewEntry(shortURL, longURL)
+	if err != nil {
+		http.Error(w, "Could not write URL", http.StatusInternalServerError)
 	}
 }
 
@@ -104,4 +112,10 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Write(respJSON)
+
+	// append entry uuid - shorturl - longurl to file
+	err = h.st.AddNewEntry(shortURL, req.URL)
+	if err != nil {
+		http.Error(w, "Could not write URL", http.StatusInternalServerError)
+	}
 }

@@ -8,19 +8,22 @@ import (
 	"go.uber.org/zap/zapcore"
 	"net"
 	"net/url"
+	"os"
 	"strings"
 )
 
 type Config struct {
-	ServerAddr string `env:"SERVER_ADDRESS"`
-	BaseURL    string `env:"BASE_URL"`
-	LogLevel   string `env:"LOG_LEVEL"`
+	ServerAddr      string `env:"SERVER_ADDRESS"`
+	BaseURL         string `env:"BASE_URL"`
+	LogLevel        string `env:"LOG_LEVEL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 }
 
 func NewConfig() (*Config, error) {
 	serverAddr := flag.String("a", "localhost:8080", "HTTP server address")
 	baseURL := flag.String("b", "http://localhost:8080", "Base URL")
 	logLevel := flag.String("l", "info", "Log level")
+	fileStoragePath := flag.String("f", "url_store.json", "File storage path")
 	flag.Parse()
 	cfg := &Config{}
 
@@ -39,6 +42,9 @@ func NewConfig() (*Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = *logLevel
 	}
+	if cfg.FileStoragePath == "" {
+		cfg.FileStoragePath = *fileStoragePath
+	}
 
 	// use defaults
 	if cfg.ServerAddr == "" {
@@ -50,6 +56,9 @@ func NewConfig() (*Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "info"
 	}
+	if cfg.FileStoragePath == "" {
+		cfg.FileStoragePath = "url_store.json"
+	}
 
 	// validate
 	if err := validateServerAddr(cfg.ServerAddr); err != nil {
@@ -59,6 +68,9 @@ func NewConfig() (*Config, error) {
 		return nil, err
 	}
 	if err := validateLogLevel(cfg.LogLevel); err != nil {
+		return nil, err
+	}
+	if err := validateFileStoragePath(cfg.FileStoragePath); err != nil {
 		return nil, err
 	}
 
@@ -91,6 +103,22 @@ func validateBaseURL(baseURL string) error {
 	}
 	if parsedURL.Scheme == "" || parsedURL.Host == "" {
 		return errors.New("empty Scheme or Host")
+	}
+	return nil
+}
+
+func validateFileStoragePath(path string) error {
+	// check if the path is empty
+	if path == "" {
+		return errors.New("empty file storage path")
+	}
+
+	// check if the path is a dir
+	info, err := os.Stat(path)
+	if err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("file storage path cannot be a directory: %s", path)
+		}
 	}
 	return nil
 }
