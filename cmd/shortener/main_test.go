@@ -23,7 +23,7 @@ func TestShortenHandler(t *testing.T) {
 		BaseURL:         "http://localhost:8080",
 		FileStoragePath: "url_store.json",
 	}
-	st, err := storage.NewStorage(cfg.FileStoragePath)
+	st, err := storage.NewRepository(cfg.FileStoragePath)
 	require.NoError(t, err)
 	h := handlers.NewHandler(cfg, st)
 
@@ -81,7 +81,7 @@ func TestExpandHandler(t *testing.T) {
 		BaseURL:         "http://localhost:8080",
 		FileStoragePath: "url_store.json",
 	}
-	st, err := storage.NewStorage(cfg.FileStoragePath)
+	st, err := storage.NewRepository(cfg.FileStoragePath)
 	require.NoError(t, err)
 	h := handlers.NewHandler(cfg, st)
 	r := chi.NewRouter()
@@ -129,7 +129,7 @@ func TestShortenJSONHandler(t *testing.T) {
 		BaseURL:         "http://localhost:8080",
 		FileStoragePath: "url_store.json",
 	}
-	st, err := storage.NewStorage(cfg.FileStoragePath)
+	st, err := storage.NewRepository(cfg.FileStoragePath)
 	require.NoError(t, err)
 	h := handlers.NewHandler(cfg, st)
 
@@ -196,7 +196,7 @@ func TestGzipCompression(t *testing.T) {
 		BaseURL:         "http://localhost:8080",
 		FileStoragePath: "url_store.json",
 	}
-	st, err := storage.NewStorage(cfg.FileStoragePath)
+	st, err := storage.NewRepository(cfg.FileStoragePath)
 	require.NoError(t, err)
 	h := handlers.NewHandler(cfg, st)
 

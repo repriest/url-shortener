@@ -20,44 +20,37 @@ type Config struct {
 }
 
 func NewConfig() (*Config, error) {
-	serverAddr := flag.String("a", "localhost:8080", "HTTP server address")
-	baseURL := flag.String("b", "http://localhost:8080", "Base URL")
-	logLevel := flag.String("l", "info", "Log level")
-	fileStoragePath := flag.String("f", "url_store.json", "File storage path")
-	flag.Parse()
 	cfg := &Config{}
+	defaults := &Config{
+		ServerAddr:      "localhost:8080",
+		BaseURL:         "http://localhost:8080",
+		LogLevel:        "info",
+		FileStoragePath: "url_store.json",
+	}
+
+	flag.StringVar(&cfg.ServerAddr, "server_addr", defaults.ServerAddr, "HTTP server address")
+	flag.StringVar(&cfg.BaseURL, "base_url", defaults.BaseURL, "Base URL")
+	flag.StringVar(&cfg.LogLevel, "log_level", defaults.LogLevel, "Log level")
+	flag.StringVar(&cfg.FileStoragePath, "file_storage_path", defaults.FileStoragePath, "File storage path")
+	flag.Parse()
 
 	// use env
 	if err := env.Parse(cfg); err != nil {
-		panic(err)
-	}
-
-	// use flags if env not set
-	if cfg.ServerAddr == "" {
-		cfg.ServerAddr = *serverAddr
-	}
-	if cfg.BaseURL == "" {
-		cfg.BaseURL = *baseURL
-	}
-	if cfg.LogLevel == "" {
-		cfg.LogLevel = *logLevel
-	}
-	if cfg.FileStoragePath == "" {
-		cfg.FileStoragePath = *fileStoragePath
+		return nil, fmt.Errorf("failed to parse env: %w", err)
 	}
 
 	// use defaults
 	if cfg.ServerAddr == "" {
-		cfg.ServerAddr = "localhost:8080"
+		cfg.ServerAddr = defaults.ServerAddr
 	}
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = "http://localhost:8080"
+		cfg.BaseURL = defaults.BaseURL
 	}
 	if cfg.LogLevel == "" {
-		cfg.LogLevel = "info"
+		cfg.LogLevel = defaults.LogLevel
 	}
 	if cfg.FileStoragePath == "" {
-		cfg.FileStoragePath = "url_store.json"
+		cfg.FileStoragePath = defaults.FileStoragePath
 	}
 
 	// validate

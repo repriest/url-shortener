@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 type URLEntry struct {
@@ -13,85 +14,110 @@ type URLEntry struct {
 	OriginalURL string `json:"original_url"`
 }
 
-type Storage struct {
-	entries     []URLEntry
-	filePath    string
-	uuidCounter int
+type Storage interface {
+	load() ([]URLEntry, error)
+	append(entry URLEntry) error
 }
 
-func NewStorage(filePath string) (*Storage, error) {
-	s := &Storage{filePath: filePath, uuidCounter: 1}
-	err := s.load()
+type fileStorage struct {
+	filePath string
+}
+
+func NewFileStorage(filePath string) Storage {
+	return &fileStorage{filePath: filePath}
+}
+
+func (s *fileStorage) load() ([]URLEntry, error) {
+	data, err := os.ReadFile(s.filePath)
 	if err != nil {
-		return nil, err
+		if os.IsNotExist(err) {
+			return []URLEntry{}, nil
+		}
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
-	return s, nil
+	// parse file to []URLentry
+	var entries []URLEntry
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		entry := URLEntry{}
+		err := json.Unmarshal([]byte(line), &entry)
+		if err != nil {
+			return []URLEntry{}, err
+		}
+		entries = append(entries, entry)
+	}
+	return entries, nil
 }
 
-func (s *Storage) load() error {
-	// open or create file
-	file, err := os.OpenFile(s.filePath, os.O_RDWR|os.O_CREATE, 0644)
+func (s *fileStorage) append(entry URLEntry) error {
+	file, err := os.OpenFile(s.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open file %s: %w", s.filePath, err)
 	}
 	defer file.Close()
 
-	// read file
-	data, err := os.ReadFile(s.filePath)
+	data, err := json.Marshal(entry)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to marshal entry: %w", err)
 	}
-
-	// if file is empty - init json with empty array
-	if len(data) == 0 {
-		s.entries = []URLEntry{}
-		_, err = file.Write([]byte("[]"))
-		if err != nil {
-			return fmt.Errorf("failed to initialize empty file %s: %w", s.filePath, err)
-		}
-		return nil
-	}
-
-	err = json.Unmarshal(data, &s.entries)
+	_, err = file.Write(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to write to file %s: %w", s.filePath, err)
+	}
+	_, err = file.WriteString("\n")
+	if err != nil {
+		return fmt.Errorf("failed to write newline to file %s: %w", s.filePath, err)
 	}
 
-	// find max uuid in file
-	for _, entry := range s.entries {
-		id, err := strconv.Atoi(entry.UUID)
-		if err != nil {
-			return fmt.Errorf("invalid UUID: %s", entry.UUID)
-		}
-		// set counter for next record
-		if id >= s.uuidCounter {
-			s.uuidCounter = id + 1
-		}
-	}
 	return nil
 }
 
-func (s *Storage) save() error {
-	data, err := json.MarshalIndent(s.entries, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(s.filePath, data, 0644)
+type Repository struct {
+	entries     []URLEntry
+	uuidCounter int
+	storage     Storage
 }
 
-func (s *Storage) AddNewEntry(shortURL string, originalURL string) error {
-	idStr := strconv.Itoa(s.uuidCounter)
-	s.uuidCounter++
+func NewRepository(filePath string) (*Repository, error) {
+	fs := NewFileStorage(filePath)
+	repo := &Repository{
+		storage:     fs,
+		uuidCounter: 1,
+	}
+	entries, err := fs.load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load entries: %w", err)
+	}
+	for _, entry := range entries {
+		id, err := strconv.Atoi(entry.UUID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid UUID: %s", entry.UUID)
+		}
+		// set counter for next record
+		if id >= repo.uuidCounter {
+			repo.uuidCounter = id + 1
+		}
+	}
+	return repo, nil
+}
+
+func (r *Repository) AddNewEntry(shortURL string, originalURL string) error {
+	idStr := strconv.Itoa(r.uuidCounter)
+	r.uuidCounter++
 
 	entry := URLEntry{
 		UUID:        idStr,
 		ShortURL:    shortURL,
 		OriginalURL: originalURL,
 	}
-	s.entries = append(s.entries, entry)
-	err := s.save()
-	if err != nil {
-		return err
+	r.entries = append(r.entries, entry)
+
+	if err := r.storage.append(entry); err != nil {
+		return fmt.Errorf("failed to add entry to storage: %w", err)
 	}
 	return nil
 }

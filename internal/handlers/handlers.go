@@ -12,10 +12,10 @@ import (
 
 type Handler struct {
 	cfg *config.Config
-	st  *storage.Storage
+	st  *storage.Repository
 }
 
-func NewHandler(cfg *config.Config, st *storage.Storage) *Handler {
+func NewHandler(cfg *config.Config, st *storage.Repository) *Handler {
 	return &Handler{cfg: cfg, st: st}
 }
 
@@ -27,10 +27,18 @@ type ShortenResponse struct {
 	Result string `json:"result"`
 }
 
-func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
-	// read body
+func readRequestBody(r *http.Request) ([]byte, error) {
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
+	if err != nil {
+		return nil, err
+	}
+	return body, nil
+}
+
+func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
+	// read body
+	body, err := readRequestBody(r)
 	if err != nil {
 		http.Error(w, "Could not read body", http.StatusBadRequest)
 		return
@@ -78,8 +86,7 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 	var req ShortenRequest
 
 	// read body
-	body, err := io.ReadAll(r.Body)
-	defer r.Body.Close()
+	body, err := readRequestBody(r)
 	if err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
