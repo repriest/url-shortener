@@ -28,10 +28,10 @@ func NewConfig() (*Config, error) {
 		FileStoragePath: "url_store.json",
 	}
 
-	flag.StringVar(&cfg.ServerAddr, "server_addr", defaults.ServerAddr, "HTTP server address")
-	flag.StringVar(&cfg.BaseURL, "base_url", defaults.BaseURL, "Base URL")
-	flag.StringVar(&cfg.LogLevel, "log_level", defaults.LogLevel, "Log level")
-	flag.StringVar(&cfg.FileStoragePath, "file_storage_path", defaults.FileStoragePath, "File storage path")
+	flag.StringVar(&cfg.ServerAddr, "a", defaults.ServerAddr, "HTTP server address")
+	flag.StringVar(&cfg.BaseURL, "b", defaults.BaseURL, "Base URL")
+	flag.StringVar(&cfg.LogLevel, "l", defaults.LogLevel, "Log level")
+	flag.StringVar(&cfg.FileStoragePath, "f", defaults.FileStoragePath, "File storage path")
 	flag.Parse()
 
 	// use env
