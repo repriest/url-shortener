@@ -1,15 +1,19 @@
 package config
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/caarlos0/env/v11"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap/zapcore"
 	"net"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -17,6 +21,7 @@ type Config struct {
 	BaseURL         string `env:"BASE_URL"`
 	LogLevel        string `env:"LOG_LEVEL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	DatabaseDSN     string `env:"DATABASE_DSN"`
 }
 
 func NewConfig() (*Config, error) {
@@ -26,12 +31,14 @@ func NewConfig() (*Config, error) {
 		BaseURL:         "http://localhost:8080",
 		LogLevel:        "info",
 		FileStoragePath: "url_store.json",
+		DatabaseDSN:     "postgres://postgres:admin@127.0.0.1:5432/postgres?sslmode=disable",
 	}
 
 	flag.StringVar(&cfg.ServerAddr, "a", defaults.ServerAddr, "HTTP server address")
 	flag.StringVar(&cfg.BaseURL, "b", defaults.BaseURL, "Base URL")
 	flag.StringVar(&cfg.LogLevel, "l", defaults.LogLevel, "Log level")
 	flag.StringVar(&cfg.FileStoragePath, "f", defaults.FileStoragePath, "File storage path")
+	flag.StringVar(&cfg.DatabaseDSN, "d", defaults.DatabaseDSN, "Database DSN")
 	flag.Parse()
 
 	// use env
@@ -52,6 +59,9 @@ func NewConfig() (*Config, error) {
 	if cfg.FileStoragePath == "" {
 		cfg.FileStoragePath = defaults.FileStoragePath
 	}
+	if cfg.DatabaseDSN == "" {
+		cfg.DatabaseDSN = defaults.DatabaseDSN
+	}
 
 	// validate
 	if err := validateServerAddr(cfg.ServerAddr); err != nil {
@@ -64,6 +74,9 @@ func NewConfig() (*Config, error) {
 		return nil, err
 	}
 	if err := validateFileStoragePath(cfg.FileStoragePath); err != nil {
+		return nil, err
+	}
+	if err := validateDatabaseDSN(cfg.DatabaseDSN); err != nil {
 		return nil, err
 	}
 
@@ -114,4 +127,22 @@ func validateFileStoragePath(path string) error {
 		}
 	}
 	return nil
+}
+
+func validateDatabaseDSN(dsn string) error {
+	_, err := url.Parse(dsn)
+	if err != nil {
+		return fmt.Errorf("invalid Database DSN: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return fmt.Errorf("invalid Database DSN: %w", err)
+	}
+	defer db.Close()
+
+	return db.PingContext(ctx)
 }

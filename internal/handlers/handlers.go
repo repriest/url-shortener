@@ -1,13 +1,17 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"github.com/go-chi/chi/v5"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/storage"
 	"github.com/repriest/url-shortener/internal/urlservice"
 	"io"
 	"net/http"
+	"time"
 )
 
 type Handler struct {
@@ -125,4 +129,24 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Could not write URL", http.StatusInternalServerError)
 	}
+}
+
+func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := sql.Open("pgx", h.cfg.DatabaseDSN)
+	if err != nil {
+		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = db.PingContext(ctx)
+	if err != nil {
+		http.Error(w, "Failed to ping database", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
