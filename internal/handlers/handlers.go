@@ -132,6 +132,11 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.DatabaseDSN == "" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	db, err := sql.Open("pgx", h.cfg.DatabaseDSN)
 	if err != nil {
 		http.Error(w, "Failed to connect to database", http.StatusInternalServerError)

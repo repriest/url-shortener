@@ -31,7 +31,7 @@ func NewConfig() (*Config, error) {
 		BaseURL:         "http://localhost:8080",
 		LogLevel:        "info",
 		FileStoragePath: "url_store.json",
-		DatabaseDSN:     "postgres://postgres:admin@127.0.0.1:5432/postgres?sslmode=disable",
+		DatabaseDSN:     "", // postgres://postgres:admin@localhost:5432/postgres?sslmode=disable
 	}
 
 	flag.StringVar(&cfg.ServerAddr, "a", defaults.ServerAddr, "HTTP server address")
@@ -59,9 +59,6 @@ func NewConfig() (*Config, error) {
 	if cfg.FileStoragePath == "" {
 		cfg.FileStoragePath = defaults.FileStoragePath
 	}
-	if cfg.DatabaseDSN == "" {
-		cfg.DatabaseDSN = defaults.DatabaseDSN
-	}
 
 	// validate
 	if err := validateServerAddr(cfg.ServerAddr); err != nil {
@@ -76,8 +73,10 @@ func NewConfig() (*Config, error) {
 	if err := validateFileStoragePath(cfg.FileStoragePath); err != nil {
 		return nil, err
 	}
-	if err := validateDatabaseDSN(cfg.DatabaseDSN); err != nil {
-		return nil, err
+	if cfg.DatabaseDSN != "" {
+		if err := validateDatabaseDSN(cfg.DatabaseDSN); err != nil {
+			return nil, err
+		}
 	}
 
 	return cfg, nil
