@@ -1,94 +1,37 @@
 package storage
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
+	"github.com/repriest/url-shortener/internal/storage/file"
+	"github.com/repriest/url-shortener/internal/storage/memory"
+	"github.com/repriest/url-shortener/internal/storage/postgres"
+	t "github.com/repriest/url-shortener/internal/storage/types"
 	"strconv"
-	"strings"
 )
 
-type URLEntry struct {
-	UUID        string `json:"uuid"`
-	ShortURL    string `json:"short_url"`
-	OriginalURL string `json:"original_url"`
-}
-
-type Storage interface {
-	load() ([]URLEntry, error)
-	append(entry URLEntry) error
-}
-
-type fileStorage struct {
-	filePath string
-}
-
-func NewFileStorage(filePath string) Storage {
-	return &fileStorage{filePath: filePath}
-}
-
-func (s *fileStorage) load() ([]URLEntry, error) {
-	data, err := os.ReadFile(s.filePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []URLEntry{}, nil
-		}
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-	// parse file to []URLentry
-	var entries []URLEntry
-	lines := strings.Split(string(data), "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		entry := URLEntry{}
-		err := json.Unmarshal([]byte(line), &entry)
-		if err != nil {
-			return []URLEntry{}, err
-		}
-		entries = append(entries, entry)
-	}
-	return entries, nil
-}
-
-func (s *fileStorage) append(entry URLEntry) error {
-	file, err := os.OpenFile(s.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open file %s: %w", s.filePath, err)
-	}
-	defer file.Close()
-
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return fmt.Errorf("failed to marshal entry: %w", err)
-	}
-	_, err = file.Write(data)
-	if err != nil {
-		return fmt.Errorf("failed to write to file %s: %w", s.filePath, err)
-	}
-	_, err = file.WriteString("\n")
-	if err != nil {
-		return fmt.Errorf("failed to write newline to file %s: %w", s.filePath, err)
-	}
-
-	return nil
-}
-
 type Repository struct {
-	entries     []URLEntry
 	uuidCounter int
-	storage     Storage
+	storage     t.Storage
 }
 
-func NewRepository(filePath string) (*Repository, error) {
-	fs := NewFileStorage(filePath)
+func NewPostgresStorage(dsn string) (t.Storage, error) {
+	return postgres.NewPgStorage(dsn)
+}
+
+func NewFileStorage(filePath string) (t.Storage, error) {
+	return file.NewFileStorage(filePath)
+}
+
+func NewMemoryStorage() t.Storage {
+	return memory.NewMemoryStorage()
+}
+
+func NewRepository(st t.Storage) (*Repository, error) {
 	repo := &Repository{
-		storage:     fs,
+		storage:     st,
 		uuidCounter: 1,
 	}
-	entries, err := fs.load()
+	entries, err := st.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load entries: %w", err)
 	}
@@ -109,15 +52,15 @@ func (r *Repository) AddNewEntry(shortURL string, originalURL string) error {
 	idStr := strconv.Itoa(r.uuidCounter)
 	r.uuidCounter++
 
-	entry := URLEntry{
+	entry := t.URLEntry{
 		UUID:        idStr,
 		ShortURL:    shortURL,
 		OriginalURL: originalURL,
 	}
-	r.entries = append(r.entries, entry)
 
-	if err := r.storage.append(entry); err != nil {
-		return fmt.Errorf("failed to add entry to storage: %w", err)
-	}
-	return nil
+	return r.storage.Append(entry)
+}
+
+func (r *Repository) Close() error {
+	return r.storage.Close()
 }

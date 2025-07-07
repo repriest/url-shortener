@@ -83,7 +83,7 @@ func (h *Handler) ExpandHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not decode URL", http.StatusBadRequest)
 	}
 
-	http.Redirect(w, r, string(longURL), http.StatusTemporaryRedirect)
+	http.Redirect(w, r, longURL, http.StatusTemporaryRedirect)
 }
 
 func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {

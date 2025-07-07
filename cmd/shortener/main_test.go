@@ -18,13 +18,11 @@ import (
 )
 
 func TestShortenHandler(t *testing.T) {
-	cfg := &config.Config{
-		ServerAddr:      "localhost:8080",
-		BaseURL:         "http://localhost:8080",
-		FileStoragePath: "url_store.json",
-	}
-	st, err := storage.NewRepository(cfg.FileStoragePath)
+	cfg, err := config.NewConfig()
 	require.NoError(t, err)
+	st, err := storage.NewRepository(storage.NewMemoryStorage())
+	require.NoError(t, err)
+	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
 
 	tt := []struct {
@@ -45,7 +43,7 @@ func TestShortenHandler(t *testing.T) {
 			name:       "Valid URL",
 			method:     http.MethodPost,
 			body:       "https://google.com",
-			response:   cfg.BaseURL + "/" + "aHR0cHM6Ly9nb29nbGUuY29t",
+			response:   cfg.BaseURL + "/aHR0cHM6Ly9nb29nbGUuY29t",
 			statusCode: http.StatusCreated,
 		},
 		{
@@ -59,7 +57,7 @@ func TestShortenHandler(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, cfg.ServerAddr, strings.NewReader(tc.body))
+			req := httptest.NewRequest(tc.method, cfg.ServerAddr, strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
 			h.ShortenHandler(rec, req)
 
@@ -76,13 +74,11 @@ func TestShortenHandler(t *testing.T) {
 }
 
 func TestExpandHandler(t *testing.T) {
-	cfg := &config.Config{
-		ServerAddr:      "localhost:8080",
-		BaseURL:         "http://localhost:8080",
-		FileStoragePath: "url_store.json",
-	}
-	st, err := storage.NewRepository(cfg.FileStoragePath)
+	cfg, err := config.NewConfig()
 	require.NoError(t, err)
+	st, err := storage.NewRepository(storage.NewMemoryStorage())
+	require.NoError(t, err)
+	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
 	r := chi.NewRouter()
 	r.Get("/{id}", h.ExpandHandler)
@@ -96,14 +92,14 @@ func TestExpandHandler(t *testing.T) {
 	}{
 		{
 			name:       "Valid URL",
-			method:     "GET",
+			method:     http.MethodGet,
 			path:       "/aHR0cHM6Ly9nb29nbGUuY29t",
 			location:   "https://google.com",
 			statusCode: http.StatusTemporaryRedirect,
 		},
 		{
 			name:       "Invalid URL",
-			method:     "GET",
+			method:     http.MethodGet,
 			path:       "/notbase64",
 			location:   "/",
 			statusCode: http.StatusBadRequest,
@@ -118,19 +114,17 @@ func TestExpandHandler(t *testing.T) {
 			r.ServeHTTP(resp, req)
 
 			assert.Equal(t, tc.statusCode, resp.Code)
-			assert.Equal(t, tc.location, resp.Header().Values("Location")[0])
+			assert.Equal(t, tc.location, resp.Header().Get("Location"))
 		})
 	}
 }
 
 func TestShortenJSONHandler(t *testing.T) {
-	cfg := &config.Config{
-		ServerAddr:      "localhost:8080",
-		BaseURL:         "http://localhost:8080",
-		FileStoragePath: "url_store.json",
-	}
-	st, err := storage.NewRepository(cfg.FileStoragePath)
+	cfg, err := config.NewConfig()
 	require.NoError(t, err)
+	st, err := storage.NewRepository(storage.NewMemoryStorage())
+	require.NoError(t, err)
+	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
 
 	tt := []struct {
@@ -143,14 +137,15 @@ func TestShortenJSONHandler(t *testing.T) {
 	}{
 		{
 			name:        "Valid URL",
-			method:      "GET",
+			method:      http.MethodPost,
 			body:        `{"url":"https://google.com"}`,
-			response:    `{"result":"http://localhost:8080/aHR0cHM6Ly9nb29nbGUuY29t"}`,
+			response:    `{"result":"` + cfg.BaseURL + `/aHR0cHM6Ly9nb29nbGUuY29t"}`,
 			statusCode:  http.StatusCreated,
 			contentType: "application/json",
 		},
 		{
 			name:        "Invalid JSON",
+			method:      http.MethodPost,
 			body:        `{not: json}`,
 			response:    "Invalid JSON\n",
 			statusCode:  http.StatusBadRequest,
@@ -158,6 +153,7 @@ func TestShortenJSONHandler(t *testing.T) {
 		},
 		{
 			name:        "No URL",
+			method:      http.MethodPost,
 			body:        `{"foo":"bar"}`,
 			response:    "URL is required\n",
 			statusCode:  http.StatusBadRequest,
@@ -165,6 +161,7 @@ func TestShortenJSONHandler(t *testing.T) {
 		},
 		{
 			name:        "Invalid URL",
+			method:      http.MethodPost,
 			body:        `{"url":"badurl!@#$"}`,
 			response:    "Could not shorten URL\n",
 			statusCode:  http.StatusBadRequest,
@@ -173,7 +170,7 @@ func TestShortenJSONHandler(t *testing.T) {
 	}
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodPost, "/api/shorten", strings.NewReader(tc.body))
+			req := httptest.NewRequest(tc.method, "/api/shorten", strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
 
 			h.ShortenJSONHandler(rec, req)
@@ -191,13 +188,11 @@ func TestShortenJSONHandler(t *testing.T) {
 }
 
 func TestGzipCompression(t *testing.T) {
-	cfg := &config.Config{
-		ServerAddr:      "localhost:8080",
-		BaseURL:         "http://localhost:8080",
-		FileStoragePath: "url_store.json",
-	}
-	st, err := storage.NewRepository(cfg.FileStoragePath)
+	cfg, err := config.NewConfig()
 	require.NoError(t, err)
+	st, err := storage.NewRepository(storage.NewMemoryStorage())
+	require.NoError(t, err)
+	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
 
 	handler := zipper.GzipMiddleware(h.ShortenHandler)
@@ -206,7 +201,7 @@ func TestGzipCompression(t *testing.T) {
 	defer srv.Close()
 
 	requestBody := "https://google.com"
-	successBody := "http://localhost:8080/aHR0cHM6Ly9nb29nbGUuY29t"
+	successBody := cfg.BaseURL + "/aHR0cHM6Ly9nb29nbGUuY29t"
 
 	// compress test
 	t.Run("sends_gzip", func(t *testing.T) {
@@ -217,31 +212,31 @@ func TestGzipCompression(t *testing.T) {
 		err = zb.Close()
 		require.NoError(t, err)
 
-		r := httptest.NewRequest("POST", srv.URL, buf)
+		r := httptest.NewRequest(http.MethodPost, srv.URL, buf)
 		r.RequestURI = ""
 		r.Header.Set("Content-Encoding", "gzip")
 
 		resp, err := http.DefaultClient.Do(r)
 		require.NoError(t, err)
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		defer resp.Body.Close()
 
 		b, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		require.Equal(t, string(b), successBody)
+		assert.Equal(t, string(b), successBody)
 	})
 
 	// decompress test
 	t.Run("accepts_gzip", func(t *testing.T) {
 		buf := bytes.NewBufferString(requestBody)
-		r := httptest.NewRequest("POST", srv.URL, buf)
+		r := httptest.NewRequest(http.MethodPost, srv.URL, buf)
 		r.RequestURI = ""
 		r.Header.Set("Accept-Encoding", "gzip")
 
 		resp, err := http.DefaultClient.Do(r)
 		require.NoError(t, err)
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		defer resp.Body.Close()
 

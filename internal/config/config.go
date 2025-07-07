@@ -30,7 +30,7 @@ func NewConfig() (*Config, error) {
 		ServerAddr:      "localhost:8080",
 		BaseURL:         "http://localhost:8080",
 		LogLevel:        "info",
-		FileStoragePath: "url_store.json",
+		FileStoragePath: "", // url_store.json
 		DatabaseDSN:     "", // postgres://postgres:admin@localhost:5432/postgres?sslmode=disable
 	}
 
@@ -56,9 +56,6 @@ func NewConfig() (*Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = defaults.LogLevel
 	}
-	if cfg.FileStoragePath == "" {
-		cfg.FileStoragePath = defaults.FileStoragePath
-	}
 
 	// validate
 	if err := validateServerAddr(cfg.ServerAddr); err != nil {
@@ -70,8 +67,10 @@ func NewConfig() (*Config, error) {
 	if err := validateLogLevel(cfg.LogLevel); err != nil {
 		return nil, err
 	}
-	if err := validateFileStoragePath(cfg.FileStoragePath); err != nil {
-		return nil, err
+	if cfg.FileStoragePath != "" {
+		if err := validateFileStoragePath(cfg.FileStoragePath); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.DatabaseDSN != "" {
 		if err := validateDatabaseDSN(cfg.DatabaseDSN); err != nil {
@@ -113,11 +112,6 @@ func validateBaseURL(baseURL string) error {
 }
 
 func validateFileStoragePath(path string) error {
-	// check if the path is empty
-	if path == "" {
-		return errors.New("empty file storage path")
-	}
-
 	// check if the path is a dir
 	info, err := os.Stat(path)
 	if err == nil {
