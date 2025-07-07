@@ -13,13 +13,23 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
 
+var cfg *config.Config
+
+func TestMain(m *testing.M) {
+	var err error
+	cfg, err = config.NewConfig()
+	if err != nil {
+		panic(err)
+	}
+	os.Exit(m.Run())
+}
+
 func TestShortenHandler(t *testing.T) {
-	cfg, err := config.NewConfig()
-	require.NoError(t, err)
 	st, err := storage.NewRepository(storage.NewMemoryStorage())
 	require.NoError(t, err)
 	defer st.Close()
@@ -74,8 +84,6 @@ func TestShortenHandler(t *testing.T) {
 }
 
 func TestExpandHandler(t *testing.T) {
-	cfg, err := config.NewConfig()
-	require.NoError(t, err)
 	st, err := storage.NewRepository(storage.NewMemoryStorage())
 	require.NoError(t, err)
 	defer st.Close()
@@ -120,8 +128,6 @@ func TestExpandHandler(t *testing.T) {
 }
 
 func TestShortenJSONHandler(t *testing.T) {
-	cfg, err := config.NewConfig()
-	require.NoError(t, err)
 	st, err := storage.NewRepository(storage.NewMemoryStorage())
 	require.NoError(t, err)
 	defer st.Close()
@@ -188,8 +194,6 @@ func TestShortenJSONHandler(t *testing.T) {
 }
 
 func TestGzipCompression(t *testing.T) {
-	cfg, err := config.NewConfig()
-	require.NoError(t, err)
 	st, err := storage.NewRepository(storage.NewMemoryStorage())
 	require.NoError(t, err)
 	defer st.Close()

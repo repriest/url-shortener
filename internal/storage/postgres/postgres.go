@@ -49,6 +49,9 @@ func (s pgStorage) Load() ([]t.URLEntry, error) {
 		}
 		entries = append(entries, entry)
 	}
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("failed to read rows: %w", err)
+	}
 	return entries, nil
 }
 
