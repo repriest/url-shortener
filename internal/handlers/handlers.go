@@ -11,7 +11,6 @@ import (
 	t "github.com/repriest/url-shortener/internal/storage/types"
 	"github.com/repriest/url-shortener/internal/urlservice"
 	"io"
-	"log"
 	"net/http"
 	"time"
 )
@@ -94,8 +93,6 @@ func (h *Handler) ExpandHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Could not decode URL", http.StatusBadRequest)
 	}
-	log.Printf("Expand short url: %s\n", h.cfg.BaseURL+"/"+shortURL)
-	log.Printf("Expand long url: %s\n", longURL)
 	http.Redirect(w, r, longURL, http.StatusTemporaryRedirect)
 }
 
