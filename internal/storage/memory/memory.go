@@ -23,6 +23,11 @@ func (s *memoryStorage) Append(entry t.URLEntry) error {
 	return nil
 }
 
+func (s *memoryStorage) BatchAppend(entries []t.URLEntry) error {
+	s.entries = append(s.entries, entries...)
+	return nil
+}
+
 func (s *memoryStorage) Close() error {
 	return nil
 }

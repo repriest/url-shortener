@@ -38,7 +38,7 @@ func NewRepository(st t.Storage) (*Repository, error) {
 	for _, entry := range entries {
 		id, err := strconv.Atoi(entry.UUID)
 		if err != nil {
-			return nil, fmt.Errorf("invalid UUID: %s", entry.UUID)
+			continue
 		}
 		// set counter for next record
 		if id >= repo.uuidCounter {
@@ -63,4 +63,8 @@ func (r *Repository) AddNewEntry(shortURL string, originalURL string) error {
 
 func (r *Repository) Close() error {
 	return r.storage.Close()
+}
+
+func (r *Repository) BatchAppend(entries []t.URLEntry) error {
+	return r.storage.BatchAppend(entries)
 }

@@ -52,13 +52,11 @@ func (s *fileStorage) Append(entry t.URLEntry) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal entry: %w", err)
 	}
+	data = append(data, '\n')
+
 	_, err = s.file.Write(data)
 	if err != nil {
 		return fmt.Errorf("failed to write to file %s: %w", s.file.Name(), err)
-	}
-	_, err = s.file.WriteString("\n")
-	if err != nil {
-		return fmt.Errorf("failed to write newline to file %s: %w", s.file.Name(), err)
 	}
 
 	return nil
@@ -66,4 +64,24 @@ func (s *fileStorage) Append(entry t.URLEntry) error {
 
 func (s *fileStorage) Close() error {
 	return s.file.Close()
+}
+
+func (s *fileStorage) BatchAppend(entries []t.URLEntry) error {
+	var data []byte
+
+	for _, entry := range entries {
+		entryJSON, err := json.Marshal(entry)
+		if err != nil {
+			return fmt.Errorf("failed to marshal entry: %w", err)
+		}
+		data = append(data, entryJSON...)
+		data = append(data, '\n')
+	}
+
+	_, err := s.file.Write(data)
+	if err != nil {
+		return fmt.Errorf("failed to write to file %s: %w", s.file.Name(), err)
+	}
+
+	return nil
 }
