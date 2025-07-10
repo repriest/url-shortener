@@ -53,10 +53,13 @@ func RequestLogger(h http.HandlerFunc) http.HandlerFunc {
 		Log.Info("got incoming HTTP request",
 			zap.String("URI", r.RequestURI),
 			zap.String("method", r.Method),
+			zap.String("Content-Type", r.Header.Get("Content-Type")),
 		)
 		h(w, r)
 		Log.Info("request finished",
 			zap.Duration("duration", time.Since(start)),
+			zap.String("Content-Type", r.Header.Get("Content-Type")),
+			zap.String("Location", r.Header.Get("Location")),
 		)
 	}
 }

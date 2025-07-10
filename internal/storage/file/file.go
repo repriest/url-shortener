@@ -68,13 +68,13 @@ func (s *fileStorage) Close() error {
 
 func (s *fileStorage) BatchAppend(entries []t.URLEntry) error {
 	var data []byte
-	
+
 	for _, entry := range entries {
-		entryJson, err := json.Marshal(entry)
+		entryJSON, err := json.Marshal(entry)
 		if err != nil {
 			return fmt.Errorf("failed to marshal entry: %w", err)
 		}
-		data = append(data, entryJson...)
+		data = append(data, entryJSON...)
 		data = append(data, '\n')
 	}
 

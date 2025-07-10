@@ -11,6 +11,7 @@ import (
 	t "github.com/repriest/url-shortener/internal/storage/types"
 	"github.com/repriest/url-shortener/internal/urlservice"
 	"io"
+	"log"
 	"net/http"
 	"time"
 )
@@ -93,7 +94,8 @@ func (h *Handler) ExpandHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Could not decode URL", http.StatusBadRequest)
 	}
-
+	log.Printf("short url: %s\n", h.cfg.BaseURL+"/"+shortURL)
+	log.Printf("long url: %s\n", longURL)
 	http.Redirect(w, r, longURL, http.StatusTemporaryRedirect)
 }
 
@@ -123,7 +125,6 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 		return
 	}
-
 	// write shortened URL
 	resp := ShortenResponse{Result: h.cfg.BaseURL + "/" + shortURL}
 	w.Header().Set("Content-Type", "application/json")
@@ -194,20 +195,20 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Empty URL", http.StatusBadRequest)
 			return
 		}
-		shortUrl, err := urlservice.ShortenURL(reqEntry.OriginalURL)
+		shortURL, err := urlservice.ShortenURL(reqEntry.OriginalURL)
 		if err != nil {
 			http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 			return
 		}
 		entry := t.URLEntry{
 			UUID:        reqEntry.CorrelationID,
-			ShortURL:    shortUrl,
+			ShortURL:    shortURL,
 			OriginalURL: reqEntry.OriginalURL,
 		}
 		entries = append(entries, entry)
 		resp = append(resp, ShortenBatchResponse{
 			CorrelationID: reqEntry.CorrelationID,
-			ShortURL:      shortUrl,
+			ShortURL:      h.cfg.BaseURL + "/" + shortURL,
 		})
 	}
 
