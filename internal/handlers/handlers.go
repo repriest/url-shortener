@@ -94,8 +94,8 @@ func (h *Handler) ExpandHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Could not decode URL", http.StatusBadRequest)
 	}
-	log.Printf("short url: %s\n", h.cfg.BaseURL+"/"+shortURL)
-	log.Printf("long url: %s\n", longURL)
+	log.Printf("Expand short url: %s\n", h.cfg.BaseURL+"/"+shortURL)
+	log.Printf("Expand long url: %s\n", longURL)
 	http.Redirect(w, r, longURL, http.StatusTemporaryRedirect)
 }
 
