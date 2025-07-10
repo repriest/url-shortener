@@ -70,3 +70,29 @@ func (s pgStorage) Append(entry t.URLEntry) error {
 func (s pgStorage) Close() error {
 	return s.db.Close()
 }
+
+func (s pgStorage) BatchAppend(entries []t.URLEntry) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.Prepare(`
+		INSERT INTO urls (uuid, short_url, original_url) 
+		VALUES ($1, $2, $3)
+	`)
+	if err != nil {
+		return fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	defer stmt.Close()
+
+	for _, entry := range entries {
+		_, err := stmt.Exec(entry.UUID, entry.ShortURL, entry.OriginalURL)
+		if err != nil {
+			return fmt.Errorf("failed to insert url: %w", err)
+		}
+	}
+	
+	return tx.Commit()
+}

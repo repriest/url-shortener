@@ -66,6 +66,7 @@ func initRouter(cfg *config.Config, st *storage.Repository) *chi.Mux {
 	r.Get("/{id}", logger.ResponseLogger(zipper.GzipMiddleware(h.ExpandHandler)))
 	r.Post("/api/shorten", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenJSONHandler)))
 	r.Get("/ping", logger.RequestLogger(zipper.GzipMiddleware(h.PingHandler)))
+	r.Post("/api/shorten/batch", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenBatchHandler)))
 	return r
 }
 

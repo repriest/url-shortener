@@ -9,5 +9,6 @@ type URLEntry struct {
 type Storage interface {
 	Load() ([]URLEntry, error)
 	Append(entry URLEntry) error
+	BatchAppend(entries []URLEntry) error
 	Close() error
 }

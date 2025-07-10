@@ -8,6 +8,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/storage"
+	t "github.com/repriest/url-shortener/internal/storage/types"
 	"github.com/repriest/url-shortener/internal/urlservice"
 	"io"
 	"net/http"
@@ -29,6 +30,16 @@ type ShortenRequest struct {
 
 type ShortenResponse struct {
 	Result string `json:"result"`
+}
+
+type ShortenBatchRequest struct {
+	CorrelationID string `json:"correlation_id"`
+	OriginalURL   string `json:"original_url"`
+}
+
+type ShortenBatchResponse struct {
+	CorrelationID string `json:"correlation_id"`
+	ShortURL      string `json:"original_url"`
 }
 
 func readRequestBody(r *http.Request) ([]byte, error) {
@@ -154,4 +165,64 @@ func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
+	var req []ShortenBatchRequest
+	var resp []ShortenBatchResponse
+
+	// read body
+	body, err := readRequestBody(r)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if len(req) == 0 {
+		http.Error(w, "Empty batch", http.StatusBadRequest)
+		return
+	}
+
+	var entries []t.URLEntry
+
+	// parese entries
+	for _, reqEntry := range req {
+		if reqEntry.OriginalURL == "" {
+			http.Error(w, "Empty URL", http.StatusBadRequest)
+			return
+		}
+		shortUrl, err := urlservice.ShortenURL(reqEntry.OriginalURL)
+		if err != nil {
+			http.Error(w, "Could not shorten URL", http.StatusBadRequest)
+			return
+		}
+		entry := t.URLEntry{
+			UUID:        reqEntry.CorrelationID,
+			ShortURL:    shortUrl,
+			OriginalURL: reqEntry.OriginalURL,
+		}
+		entries = append(entries, entry)
+		resp = append(resp, ShortenBatchResponse{
+			CorrelationID: reqEntry.CorrelationID,
+			ShortURL:      shortUrl,
+		})
+	}
+
+	err = h.st.BatchAppend(entries)
+	if err != nil {
+		http.Error(w, "Failed to batch append", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	respJSON, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "Could not encode response", http.StatusInternalServerError)
+		return
+	}
+	w.Write(respJSON)
 }

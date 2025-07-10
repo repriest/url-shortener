@@ -64,3 +64,7 @@ func (r *Repository) AddNewEntry(shortURL string, originalURL string) error {
 func (r *Repository) Close() error {
 	return r.storage.Close()
 }
+
+func (r *Repository) BatchAppend(entries []t.URLEntry) error {
+	return r.storage.BatchAppend(entries)
+}
