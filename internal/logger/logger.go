@@ -113,7 +113,8 @@ func ResponseLogger(h http.HandlerFunc) http.HandlerFunc {
 		Log.Info("outgoing HTTP response",
 			zap.Int("status", responseData.status),
 			zap.Int("size", responseData.size),
-			zap.String("body", responseBody),
+			zap.String("request_URI", r.URL.String()),
+			zap.String("response_body", responseBody),
 			zap.String("content_type", w.Header().Get("Content-Type")),
 		)
 	}
