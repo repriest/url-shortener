@@ -63,10 +63,11 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 	err = h.st.AddNewEntry(shortURL, longURL)
 	if err != nil {
 		handleStorageError(w, err)
+	} else {
+		w.WriteHeader(http.StatusCreated)
 	}
 
 	// write response
-	w.WriteHeader(http.StatusCreated)
 	if _, err := w.Write([]byte(h.cfg.BaseURL + "/" + shortURL)); err != nil {
 		http.Error(w, "Could not write URL", http.StatusInternalServerError)
 		return
@@ -111,13 +112,15 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	// check existing shortURL
 	err = h.st.AddNewEntry(shortURL, req.URL)
+
 	if err != nil {
 		handleStorageError(w, err)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
 	}
 
 	// write shortened URL
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
 	resp := ShortenResponse{Result: h.cfg.BaseURL + "/" + shortURL}
 	respJSON, err := json.Marshal(resp)
 	if err != nil {

@@ -102,16 +102,6 @@ func (s pgStorage) BatchAppend(entries []t.URLEntry) error {
 	}
 	defer stmt.Close()
 
-	var shortURLs []string
-	for _, entry := range entries {
-		var shortURL string
-		err := stmt.QueryRow(entry.UUID, entry.ShortURL, entry.OriginalURL).Scan(&shortURL)
-		if err != nil {
-			return fmt.Errorf("failed to insert url: %w", err)
-		}
-		shortURLs = append(shortURLs, shortURL)
-	}
-
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
