@@ -1,10 +1,12 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	t "github.com/repriest/url-shortener/internal/storage/types"
+	"time"
 )
 
 type pgStorage struct {
@@ -21,7 +23,7 @@ func NewPgStorage(dsn string) (t.Storage, error) {
 		CREATE TABLE IF NOT EXISTS urls (
 			uuid TEXT PRIMARY KEY,
 			short_url TEXT NOT NULL,
-			original_url TEXT NOT NULL
+			original_url TEXT NOT NULL UNIQUE
 		)
 	`)
 
@@ -56,14 +58,22 @@ func (s pgStorage) Load() ([]t.URLEntry, error) {
 }
 
 func (s pgStorage) Append(entry t.URLEntry) error {
-	_, err := s.db.Exec(`
+	var shortURL string
+	err := s.db.QueryRow(`
 		INSERT INTO urls (uuid, short_url, original_url) 
 		VALUES ($1, $2, $3)
-	`, entry.UUID, entry.ShortURL, entry.OriginalURL)
+		ON CONFLICT (original_url) DO UPDATE SET uuid = urls.uuid
+		RETURNING short_url
+	`, entry.UUID, entry.ShortURL, entry.OriginalURL).Scan(&shortURL)
 
 	if err != nil {
 		return fmt.Errorf("failed to insert url: %w", err)
 	}
+
+	if shortURL != entry.ShortURL {
+		return t.ErrURLExists
+	}
+
 	return nil
 }
 
@@ -72,7 +82,10 @@ func (s pgStorage) Close() error {
 }
 
 func (s pgStorage) BatchAppend(entries []t.URLEntry) error {
-	tx, err := s.db.Begin()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -81,18 +94,27 @@ func (s pgStorage) BatchAppend(entries []t.URLEntry) error {
 	stmt, err := tx.Prepare(`
 		INSERT INTO urls (uuid, short_url, original_url) 
 		VALUES ($1, $2, $3)
+		ON CONFLICT (original_url) DO UPDATE SET uuid = urls.uuid
+		RETURNING short_url
 	`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
 
+	var shortURLs []string
 	for _, entry := range entries {
-		_, err := stmt.Exec(entry.UUID, entry.ShortURL, entry.OriginalURL)
+		var shortURL string
+		err := stmt.QueryRow(entry.UUID, entry.ShortURL, entry.OriginalURL).Scan(&shortURL)
 		if err != nil {
 			return fmt.Errorf("failed to insert url: %w", err)
 		}
+		shortURLs = append(shortURLs, shortURL)
 	}
-	
-	return tx.Commit()
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }

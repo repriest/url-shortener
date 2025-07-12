@@ -1,5 +1,9 @@
 package types
 
+import "errors"
+
+var ErrURLExists = errors.New("URL already exists")
+
 type URLEntry struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`

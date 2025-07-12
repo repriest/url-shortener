@@ -10,7 +10,6 @@ import (
 	"github.com/repriest/url-shortener/internal/storage"
 	t "github.com/repriest/url-shortener/internal/storage/types"
 	"github.com/repriest/url-shortener/internal/urlservice"
-	"io"
 	"net/http"
 	"time"
 )
@@ -42,27 +41,10 @@ type ShortenBatchResponse struct {
 	ShortURL      string `json:"short_url"`
 }
 
-func readRequestBody(r *http.Request) ([]byte, error) {
-	body, err := io.ReadAll(r.Body)
-	defer r.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-	return body, nil
-}
-
 func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
-	// read body
-	body, err := readRequestBody(r)
-	if err != nil {
-		http.Error(w, "Could not read body", http.StatusBadRequest)
-		return
-	}
-
-	// check if URL is empty
-	longURL := string(body)
+	longURL, err := getLongURL(r)
 	if longURL == "" {
-		w.WriteHeader(http.StatusCreated)
+		http.Error(w, "URL is required", http.StatusBadRequest)
 		return
 	}
 
@@ -73,17 +55,17 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// write shortened URL
+	// check existing shortURL
+	err = h.st.AddNewEntry(shortURL, longURL)
+	if err != nil {
+		handleStorageError(w, err)
+	}
+
+	// write response
 	w.WriteHeader(http.StatusCreated)
 	if _, err := w.Write([]byte(h.cfg.BaseURL + "/" + shortURL)); err != nil {
 		http.Error(w, "Could not write URL", http.StatusInternalServerError)
 		return
-	}
-
-	// append entry uuid - shorturl - longurl to file
-	err = h.st.AddNewEntry(shortURL, longURL)
-	if err != nil {
-		http.Error(w, "Could not write URL", http.StatusInternalServerError)
 	}
 }
 
@@ -122,22 +104,23 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 		return
 	}
+
+	// check existing shortURL
+	err = h.st.AddNewEntry(shortURL, req.URL)
+	if err != nil {
+		handleStorageError(w, err)
+	}
+
 	// write shortened URL
-	resp := ShortenResponse{Result: h.cfg.BaseURL + "/" + shortURL}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	resp := ShortenResponse{Result: h.cfg.BaseURL + "/" + shortURL}
 	respJSON, err := json.Marshal(resp)
 	if err != nil {
 		http.Error(w, "Could not encode response", http.StatusInternalServerError)
 		return
 	}
-	w.Write(respJSON)
-
-	// append entry uuid - shorturl - longurl to file
-	err = h.st.AddNewEntry(shortURL, req.URL)
-	if err != nil {
-		http.Error(w, "Could not write URL", http.StatusInternalServerError)
-	}
+	writeResponse(w, respJSON)
 }
 
 func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
@@ -222,5 +205,5 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not encode response", http.StatusInternalServerError)
 		return
 	}
-	w.Write(respJSON)
+	writeResponse(w, respJSON)
 }
