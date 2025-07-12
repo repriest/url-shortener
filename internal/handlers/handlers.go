@@ -43,8 +43,12 @@ type ShortenBatchResponse struct {
 
 func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 	longURL, err := getLongURL(r)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 	if longURL == "" {
-		http.Error(w, "URL is required", http.StatusBadRequest)
+		w.WriteHeader(http.StatusCreated)
 		return
 	}
 
