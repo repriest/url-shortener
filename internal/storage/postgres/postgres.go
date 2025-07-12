@@ -58,20 +58,33 @@ func (s pgStorage) Load() ([]t.URLEntry, error) {
 }
 
 func (s pgStorage) Append(entry t.URLEntry) error {
-	var shortURL string
-	err := s.db.QueryRow(`
-		INSERT INTO urls (uuid, short_url, original_url) 
-		VALUES ($1, $2, $3)
-		ON CONFLICT (original_url) DO UPDATE SET uuid = urls.uuid
-		RETURNING short_url
-	`, entry.UUID, entry.ShortURL, entry.OriginalURL).Scan(&shortURL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
+	// try to insert entry
+	result, err := s.db.ExecContext(ctx, `
+			INSERT INTO urls (uuid, short_url, original_url) 
+			VALUES ($1, $2, $3)
+			ON CONFLICT (original_url) DO NOTHING 
+		`, entry.UUID, entry.ShortURL, entry.OriginalURL)
 	if err != nil {
 		return fmt.Errorf("failed to insert url: %w", err)
 	}
 
-	if shortURL != entry.ShortURL {
-		return t.ErrURLExists
+	// check if url was inserted
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	// if nothing was inserted - return error with existing short url
+	if rowsAffected == 0 {
+		var existingShortURL string
+		err := s.db.QueryRowContext(ctx, "SELECT short_url FROM urls WHERE original_url = $1", entry.OriginalURL).Scan(&existingShortURL)
+		if err != nil {
+			return fmt.Errorf("failed to query existing short url: %w", err)
+		}
+		return &t.URLConflictError{ShortURL: existingShortURL}
 	}
 
 	return nil
@@ -91,16 +104,24 @@ func (s pgStorage) BatchAppend(entries []t.URLEntry) error {
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`
-		INSERT INTO urls (uuid, short_url, original_url) 
-		VALUES ($1, $2, $3)
-		ON CONFLICT (original_url) DO UPDATE SET uuid = urls.uuid
-		RETURNING short_url
-	`)
+	// prepare insert entry statement
+	stmt, err := tx.PrepareContext(ctx, `
+			INSERT INTO urls (uuid, short_url, original_url) 
+			VALUES ($1, $2, $3)
+			ON CONFLICT (original_url) DO NOTHING 
+		`)
 	if err != nil {
 		return fmt.Errorf("failed to prepare statement: %w", err)
 	}
 	defer stmt.Close()
+
+	// execute insert entry statement
+	for _, entry := range entries {
+		_, err = stmt.ExecContext(ctx, entry.UUID, entry.ShortURL, entry.OriginalURL)
+		if err != nil {
+			return fmt.Errorf("failed to insert entry: %w", err)
+		}
+	}
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)

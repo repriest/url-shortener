@@ -4,42 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"github.com/go-chi/chi/v5"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/repriest/url-shortener/internal/config"
-	"github.com/repriest/url-shortener/internal/storage"
 	t "github.com/repriest/url-shortener/internal/storage/types"
 	"github.com/repriest/url-shortener/internal/urlservice"
 	"net/http"
 	"time"
 )
-
-type Handler struct {
-	cfg *config.Config
-	st  *storage.Repository
-}
-
-func NewHandler(cfg *config.Config, st *storage.Repository) *Handler {
-	return &Handler{cfg: cfg, st: st}
-}
-
-type ShortenRequest struct {
-	URL string `json:"url"`
-}
-
-type ShortenResponse struct {
-	Result string `json:"result"`
-}
-
-type ShortenBatchRequest struct {
-	CorrelationID string `json:"correlation_id"`
-	OriginalURL   string `json:"original_url"`
-}
-
-type ShortenBatchResponse struct {
-	CorrelationID string `json:"correlation_id"`
-	ShortURL      string `json:"short_url"`
-}
 
 func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 	longURL, err := getLongURL(r)
@@ -58,17 +30,25 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 		return
 	}
+	responseURL := h.cfg.BaseURL + "/" + shortURL
 
 	// check existing shortURL
 	err = h.st.AddNewEntry(shortURL, longURL)
 	if err != nil {
-		handleStorageError(w, err)
+		if errors.Is(err, &t.URLConflictError{}) {
+			urlConflictError := err.(*t.URLConflictError) // get instance of URLConflictError
+			w.WriteHeader(http.StatusConflict)
+			responseURL = h.cfg.BaseURL + "/" + urlConflictError.ShortURL
+		} else {
+			http.Error(w, "Could not write URL to storage", http.StatusInternalServerError)
+			return
+		}
 	} else {
 		w.WriteHeader(http.StatusCreated)
 	}
 
 	// write response
-	if _, err := w.Write([]byte(h.cfg.BaseURL + "/" + shortURL)); err != nil {
+	if _, err := w.Write([]byte(responseURL)); err != nil {
 		http.Error(w, "Could not write URL", http.StatusInternalServerError)
 		return
 	}
@@ -112,17 +92,23 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	// check existing shortURL
 	err = h.st.AddNewEntry(shortURL, req.URL)
-
+	responseURL := ShortenResponse{h.cfg.BaseURL + "/" + shortURL}
 	if err != nil {
-		handleStorageError(w, err)
+		if errors.Is(err, &t.URLConflictError{}) {
+			urlConflictError := err.(*t.URLConflictError) // get instance of URLConflictError
+			responseURL = ShortenResponse{h.cfg.BaseURL + "/" + urlConflictError.ShortURL}
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			http.Error(w, "Could not write URL to storage", http.StatusInternalServerError)
+			return
+		}
 	} else {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 	}
 
 	// write shortened URL
-	resp := ShortenResponse{Result: h.cfg.BaseURL + "/" + shortURL}
-	respJSON, err := json.Marshal(resp)
+	respJSON, err := json.Marshal(responseURL)
 	if err != nil {
 		http.Error(w, "Could not encode response", http.StatusInternalServerError)
 		return

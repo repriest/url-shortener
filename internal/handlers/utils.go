@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"errors"
-	t "github.com/repriest/url-shortener/internal/storage/types"
 	"io"
 	"net/http"
 )
@@ -19,14 +17,6 @@ func readRequestBody(r *http.Request) ([]byte, error) {
 func writeResponse(w http.ResponseWriter, content []byte) {
 	if _, err := w.Write(content); err != nil {
 		http.Error(w, "Could not write response", http.StatusInternalServerError)
-	}
-}
-
-func handleStorageError(w http.ResponseWriter, err error) {
-	if errors.Is(err, t.ErrURLExists) {
-		w.WriteHeader(http.StatusConflict)
-	} else {
-		http.Error(w, "Could not write URL to storage", http.StatusInternalServerError)
 	}
 }
 
