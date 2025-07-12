@@ -82,7 +82,7 @@ func (s pgStorage) Append(entry t.URLEntry) error {
 		var existingShortURL string
 		err := s.db.QueryRowContext(ctx, "SELECT short_url FROM urls WHERE original_url = $1", entry.OriginalURL).Scan(&existingShortURL)
 		if err != nil {
-			return fmt.Errorf("failed to query existing short url: %w", err)
+			return &t.URLConflictError{ShortURL: ""}
 		}
 		return &t.URLConflictError{ShortURL: existingShortURL}
 	}

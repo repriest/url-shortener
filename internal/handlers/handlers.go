@@ -36,7 +36,8 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 	err = h.st.AddNewEntry(shortURL, longURL)
 	if err != nil {
 		if errors.Is(err, &t.URLConflictError{}) {
-			urlConflictError := err.(*t.URLConflictError) // get instance of URLConflictError
+			var urlConflictError *t.URLConflictError
+			errors.As(err, &urlConflictError) // get instance of URLConflictError
 			w.WriteHeader(http.StatusConflict)
 			responseURL = h.cfg.BaseURL + "/" + urlConflictError.ShortURL
 		} else {
@@ -95,8 +96,10 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 	responseURL := ShortenResponse{h.cfg.BaseURL + "/" + shortURL}
 	if err != nil {
 		if errors.Is(err, &t.URLConflictError{}) {
-			urlConflictError := err.(*t.URLConflictError) // get instance of URLConflictError
+			var urlConflictError *t.URLConflictError
+			errors.As(err, &urlConflictError) // get instance of URLConflictError
 			responseURL = ShortenResponse{h.cfg.BaseURL + "/" + urlConflictError.ShortURL}
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
 		} else {
 			http.Error(w, "Could not write URL to storage", http.StatusInternalServerError)
