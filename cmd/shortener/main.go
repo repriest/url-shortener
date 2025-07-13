@@ -1,70 +1,67 @@
 package main
 
 import (
-	"encoding/base64"
-	"github.com/repriest/url-shortener/cmd/shortener/config"
-	"io"
+	"github.com/go-chi/chi/v5"
+	"github.com/repriest/url-shortener/internal/config"
+	"github.com/repriest/url-shortener/internal/handlers"
+	"github.com/repriest/url-shortener/internal/logger"
+	"github.com/repriest/url-shortener/internal/storage"
+	"github.com/repriest/url-shortener/internal/zipper"
 	"log"
 	"net/http"
-	"net/url"
-
-	"github.com/go-chi/chi/v5"
 )
 
+func initConfig() (*config.Config, error) {
+	cfg, err := config.NewConfig()
+	if err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
+func initLogger(cfg *config.Config) error {
+	if err := logger.Initialize(cfg.LogLevel); err != nil {
+		return err
+	}
+	return nil
+}
+
+func initStorage(cfg *config.Config) (*storage.Repository, error) {
+	st, err := storage.NewRepository(cfg.FileStoragePath)
+	if err != nil {
+		return nil, err
+	}
+	return st, nil
+}
+
+func initRouter(cfg *config.Config, st *storage.Repository) *chi.Mux {
+	h := handlers.NewHandler(cfg, st)
+	r := chi.NewRouter()
+	r.Post("/", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenHandler)))
+	r.Get("/{id}", logger.ResponseLogger(zipper.GzipMiddleware(h.ExpandHandler)))
+	r.Post("/api/shorten", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenJSONHandler)))
+	return r
+}
+
 func main() {
-	if err := run(); err != nil {
+	cfg, err := initConfig()
+	if err != nil {
 		log.Fatal(err)
 	}
-}
 
-func run() error {
-	cfg := config.NewConfig()
-	r := chi.NewRouter()
-	r.Post("/", encodeHandler(cfg))
-	r.Get("/{id}", decodeHandler(cfg))
-	return http.ListenAndServe(cfg.ServerAddr, r)
-}
-
-func encodeHandler(cfg *config.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		defer r.Body.Close()
-
-		if err != nil {
-			log.Println("Error reading body:", err)
-			http.Error(w, "can't read body", http.StatusBadRequest)
-			return
-		}
-
-		if _, err = url.ParseRequestURI(string(body[:])); err != nil {
-			if len(body) == 0 {
-				w.WriteHeader(http.StatusCreated)
-				return
-			}
-			log.Println("Could not parse URI: ", err)
-			http.Error(w, "Could not parse URI", http.StatusBadRequest)
-			return
-		}
-
-		shortURI := base64.StdEncoding.EncodeToString(body)
-		w.WriteHeader(http.StatusCreated)
-
-		if _, err := w.Write([]byte(cfg.BaseURL + "/" + shortURI)); err != nil {
-			log.Println("Could not write URI: ", shortURI)
-			http.Error(w, "Could not write URI", http.StatusInternalServerError)
-			return
-		}
+	err = initLogger(cfg)
+	if err != nil {
+		log.Fatal(err)
 	}
-}
 
-func decodeHandler(cfg *config.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		shortURI := chi.URLParam(r, "id")
-		longURI, err := base64.StdEncoding.DecodeString(shortURI)
-		if err != nil {
-			log.Println("Could not decode URI: ", err)
-			http.Error(w, "Could not decode URI", http.StatusBadRequest)
-		}
-		http.Redirect(w, r, string(longURI), http.StatusTemporaryRedirect)
+	store, err := initStorage(cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	r := initRouter(cfg, store)
+	err = http.ListenAndServe(cfg.ServerAddr, r)
+	if err != nil {
+		log.Fatal(err)
 	}
 }
