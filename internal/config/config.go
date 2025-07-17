@@ -1,8 +1,6 @@
 package config
 
 import (
-	"context"
-	"database/sql"
 	"errors"
 	"flag"
 	"fmt"
@@ -13,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 )
 
 type Config struct {
@@ -128,14 +125,5 @@ func validateDatabaseDSN(dsn string) error {
 		return fmt.Errorf("invalid Database DSN: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return fmt.Errorf("invalid Database DSN: %w", err)
-	}
-	defer db.Close()
-
-	return db.PingContext(ctx)
+	return nil
 }

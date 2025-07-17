@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/handlers"
-	"github.com/repriest/url-shortener/internal/storage"
+	"github.com/repriest/url-shortener/internal/storage/memory"
 	"github.com/repriest/url-shortener/internal/zipper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,7 +30,7 @@ func TestMain(m *testing.M) {
 }
 
 func TestShortenHandler(t *testing.T) {
-	st, err := storage.NewRepository(storage.NewMemoryStorage())
+	st, err := memory.NewMemoryStorage()
 	require.NoError(t, err)
 	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
@@ -43,21 +43,21 @@ func TestShortenHandler(t *testing.T) {
 		statusCode int
 	}{
 		{
-			name:       "Empty body",
+			name:       "EmptyBody",
 			method:     http.MethodPost,
 			body:       "",
 			response:   "",
 			statusCode: http.StatusCreated,
 		},
 		{
-			name:       "Valid URL",
+			name:       "ValidURL",
 			method:     http.MethodPost,
 			body:       "https://google.com",
 			response:   cfg.BaseURL + "/aHR0cHM6Ly9nb29nbGUuY29t",
 			statusCode: http.StatusCreated,
 		},
 		{
-			name:       "Invalid URL",
+			name:       "InvalidURL",
 			method:     http.MethodPost,
 			body:       "badurl!@#$",
 			response:   "Could not shorten URL\n",
@@ -84,7 +84,7 @@ func TestShortenHandler(t *testing.T) {
 }
 
 func TestExpandHandler(t *testing.T) {
-	st, err := storage.NewRepository(storage.NewMemoryStorage())
+	st, err := memory.NewMemoryStorage()
 	require.NoError(t, err)
 	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
@@ -99,17 +99,17 @@ func TestExpandHandler(t *testing.T) {
 		statusCode int
 	}{
 		{
-			name:       "Valid URL",
+			name:       "ValidURL",
 			method:     http.MethodGet,
 			path:       "/aHR0cHM6Ly9nb29nbGUuY29t",
 			location:   "https://google.com",
 			statusCode: http.StatusTemporaryRedirect,
 		},
 		{
-			name:       "Invalid URL",
+			name:       "InvalidURL",
 			method:     http.MethodGet,
 			path:       "/notbase64",
-			location:   "/",
+			location:   "",
 			statusCode: http.StatusBadRequest,
 		},
 	}
@@ -128,7 +128,7 @@ func TestExpandHandler(t *testing.T) {
 }
 
 func TestShortenJSONHandler(t *testing.T) {
-	st, err := storage.NewRepository(storage.NewMemoryStorage())
+	st, err := memory.NewMemoryStorage()
 	require.NoError(t, err)
 	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
@@ -142,7 +142,7 @@ func TestShortenJSONHandler(t *testing.T) {
 		contentType string
 	}{
 		{
-			name:        "Valid URL",
+			name:        "ValidURL",
 			method:      http.MethodPost,
 			body:        `{"url":"https://google.com"}`,
 			response:    `{"result":"` + cfg.BaseURL + `/aHR0cHM6Ly9nb29nbGUuY29t"}`,
@@ -150,7 +150,7 @@ func TestShortenJSONHandler(t *testing.T) {
 			contentType: "application/json",
 		},
 		{
-			name:        "Invalid JSON",
+			name:        "InvalidJSON",
 			method:      http.MethodPost,
 			body:        `{not: json}`,
 			response:    "Invalid JSON\n",
@@ -158,7 +158,7 @@ func TestShortenJSONHandler(t *testing.T) {
 			contentType: "text/plain; charset=utf-8",
 		},
 		{
-			name:        "No URL",
+			name:        "NoURL",
 			method:      http.MethodPost,
 			body:        `{"foo":"bar"}`,
 			response:    "URL is required\n",
@@ -166,7 +166,7 @@ func TestShortenJSONHandler(t *testing.T) {
 			contentType: "text/plain; charset=utf-8",
 		},
 		{
-			name:        "Invalid URL",
+			name:        "InvalidURL",
 			method:      http.MethodPost,
 			body:        `{"url":"badurl!@#$"}`,
 			response:    "Could not shorten URL\n",
@@ -194,15 +194,15 @@ func TestShortenJSONHandler(t *testing.T) {
 }
 
 func TestGzipCompression(t *testing.T) {
-	st, err := storage.NewRepository(storage.NewMemoryStorage())
+	st, err := memory.NewMemoryStorage()
 	require.NoError(t, err)
 	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
-
-	handler := zipper.GzipMiddleware(h.ShortenHandler)
-
-	srv := httptest.NewServer(handler)
-	defer srv.Close()
+	r := chi.NewRouter()
+	r.Group(func(r chi.Router) {
+		r.Use(zipper.GzipMiddleware)
+		r.Post("/", h.ShortenHandler)
+	})
 
 	requestBody := "https://google.com"
 	successBody := cfg.BaseURL + "/aHR0cHM6Ly9nb29nbGUuY29t"
@@ -216,40 +216,115 @@ func TestGzipCompression(t *testing.T) {
 		err = zb.Close()
 		require.NoError(t, err)
 
-		r := httptest.NewRequest(http.MethodPost, srv.URL, buf)
-		r.RequestURI = ""
-		r.Header.Set("Content-Encoding", "gzip")
+		req := httptest.NewRequest(http.MethodPost, "/", buf)
+		req.Header.Set("Content-Encoding", "gzip")
+		rec := httptest.NewRecorder()
 
-		resp, err := http.DefaultClient.Do(r)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+		r.ServeHTTP(rec, req)
 
+		resp := rec.Result()
+		respBody, err := io.ReadAll(resp.Body)
 		defer resp.Body.Close()
-
-		b, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.Equal(t, string(b), successBody)
+
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+		assert.Equal(t, string(respBody), successBody)
 	})
 
 	// decompress test
 	t.Run("accepts_gzip", func(t *testing.T) {
 		buf := bytes.NewBufferString(requestBody)
-		r := httptest.NewRequest(http.MethodPost, srv.URL, buf)
-		r.RequestURI = ""
-		r.Header.Set("Accept-Encoding", "gzip")
+		req := httptest.NewRequest(http.MethodPost, "/", buf)
+		req.Header.Set("Accept-Encoding", "gzip")
+		rec := httptest.NewRecorder()
 
-		resp, err := http.DefaultClient.Do(r)
-		require.NoError(t, err)
+		r.ServeHTTP(rec, req)
+
+		resp := rec.Result()
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
-
-		defer resp.Body.Close()
 
 		zr, err := gzip.NewReader(resp.Body)
 		require.NoError(t, err)
+		defer zr.Close()
 
-		b, err := io.ReadAll(zr)
+		respBody, err := io.ReadAll(zr)
 		require.NoError(t, err)
 
-		require.Equal(t, string(b), successBody)
+		require.Equal(t, string(respBody), successBody)
 	})
+}
+
+func TestShortenBatchHandler(t *testing.T) {
+	st, err := memory.NewMemoryStorage()
+	require.NoError(t, err)
+	defer st.Close()
+	h := handlers.NewHandler(cfg, st)
+
+	tt := []struct {
+		name        string
+		method      string
+		body        string
+		response    string
+		statusCode  int
+		contentType string
+	}{
+		{
+			name:        "ValidBatch",
+			method:      http.MethodPost,
+			body:        `[{"correlation_id":"1","original_url":"https://google.com"}]`,
+			response:    `[{"correlation_id":"1","short_url":"` + cfg.BaseURL + `/aHR0cHM6Ly9nb29nbGUuY29t"}]`,
+			statusCode:  http.StatusCreated,
+			contentType: "application/json",
+		},
+		{
+			name:        "EmptyBatch",
+			method:      http.MethodPost,
+			body:        `[]`,
+			response:    "Empty batch\n",
+			statusCode:  http.StatusBadRequest,
+			contentType: "text/plain; charset=utf-8",
+		},
+		{
+			name:        "InvalidJSON",
+			method:      http.MethodPost,
+			body:        `{not: json}`,
+			response:    "Invalid JSON\n",
+			statusCode:  http.StatusBadRequest,
+			contentType: "text/plain; charset=utf-8",
+		},
+		{
+			name:        "EmptyURL",
+			method:      http.MethodPost,
+			body:        `[{"correlation_id":"1","original_url":""}]`,
+			response:    "Empty URL\n",
+			statusCode:  http.StatusBadRequest,
+			contentType: "text/plain; charset=utf-8",
+		},
+		{
+			name:        "InvalidURL",
+			method:      http.MethodPost,
+			body:        `[{"correlation_id":"1","original_url":"badurl!@#$"}]`,
+			response:    "Could not shorten URL\n",
+			statusCode:  http.StatusBadRequest,
+			contentType: "text/plain; charset=utf-8",
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/api/shorten/batch", strings.NewReader(tc.body))
+			rec := httptest.NewRecorder()
+
+			h.ShortenBatchHandler(rec, req)
+
+			resp := rec.Result()
+			respBody, err := io.ReadAll(resp.Body)
+			defer resp.Body.Close()
+			require.NoError(t, err)
+
+			assert.Equal(t, tc.statusCode, resp.StatusCode)
+			assert.Equal(t, tc.contentType, resp.Header.Get("Content-Type"))
+			assert.Equal(t, tc.response, string(respBody))
+		})
+	}
 }

@@ -50,8 +50,8 @@ func Initialize(level string) error {
 }
 
 // RequestLogger — middleware-логер для входящих HTTP-запросов.
-func RequestLogger(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func RequestLogger(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
 		var bodyBytes []byte
@@ -67,14 +67,14 @@ func RequestLogger(h http.HandlerFunc) http.HandlerFunc {
 			zap.ByteString("body", bodyBytes),
 		)
 
-		h(w, r)
+		h.ServeHTTP(w, r)
 
 		Log.Info("request completed",
 			zap.Duration("duration", time.Since(start)),
 			zap.String("content_type", r.Header.Get("Content-Type")),
 			zap.String("location", r.Header.Get("Location")),
 		)
-	}
+	})
 }
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
@@ -92,8 +92,8 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode // захватываем код статуса
 }
 
-func ResponseLogger(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func ResponseLogger(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		responseData := &responseData{
 			status: http.StatusOK, // по умолчанию 200 OK
 			size:   0,
@@ -104,7 +104,7 @@ func ResponseLogger(h http.HandlerFunc) http.HandlerFunc {
 			responseData:   responseData,
 		}
 
-		h(&lw, r)
+		h.ServeHTTP(&lw, r)
 		var responseBody string
 		if responseData.body.Len() > 0 {
 			responseBody = responseData.body.String()
@@ -112,10 +112,9 @@ func ResponseLogger(h http.HandlerFunc) http.HandlerFunc {
 
 		Log.Info("outgoing HTTP response",
 			zap.Int("status", responseData.status),
-			zap.Int("size", responseData.size),
 			zap.String("request_URI", r.URL.String()),
 			zap.String("response_body", responseBody),
 			zap.String("content_type", w.Header().Get("Content-Type")),
 		)
-	}
+	})
 }

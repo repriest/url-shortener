@@ -1,11 +1,9 @@
 package types
 
 import (
-	"errors"
+	"context"
 	"fmt"
 )
-
-var ErrURLExists = errors.New("URL already exists")
 
 type URLConflictError struct {
 	ShortURL string
@@ -26,4 +24,5 @@ type Storage interface {
 	Append(entry URLEntry) error
 	BatchAppend(entries []URLEntry) error
 	Close() error
+	Ping(ctx context.Context) error
 }

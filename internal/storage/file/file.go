@@ -1,6 +1,7 @@
 package file
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	t "github.com/repriest/url-shortener/internal/storage/types"
@@ -8,20 +9,20 @@ import (
 	"strings"
 )
 
-type fileStorage struct {
+type FileStorage struct {
 	file *os.File
 }
 
-func NewFileStorage(filePath string) (t.Storage, error) {
+func NewFileStorage(filePath string) (*FileStorage, error) {
 	file, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open or create file: %w", err)
 	}
 
-	return &fileStorage{file: file}, nil
+	return &FileStorage{file: file}, nil
 }
 
-func (s *fileStorage) Load() ([]t.URLEntry, error) {
+func (s *FileStorage) Load() ([]t.URLEntry, error) {
 	data, err := os.ReadFile(s.file.Name())
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -47,7 +48,7 @@ func (s *fileStorage) Load() ([]t.URLEntry, error) {
 	return entries, nil
 }
 
-func (s *fileStorage) Append(entry t.URLEntry) error {
+func (s *FileStorage) Append(entry t.URLEntry) error {
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return fmt.Errorf("failed to marshal entry: %w", err)
@@ -62,11 +63,7 @@ func (s *fileStorage) Append(entry t.URLEntry) error {
 	return nil
 }
 
-func (s *fileStorage) Close() error {
-	return s.file.Close()
-}
-
-func (s *fileStorage) BatchAppend(entries []t.URLEntry) error {
+func (s *FileStorage) BatchAppend(entries []t.URLEntry) error {
 	var data []byte
 
 	for _, entry := range entries {
@@ -83,5 +80,13 @@ func (s *fileStorage) BatchAppend(entries []t.URLEntry) error {
 		return fmt.Errorf("failed to write to file %s: %w", s.file.Name(), err)
 	}
 
+	return nil
+}
+
+func (s *FileStorage) Close() error {
+	return s.file.Close()
+}
+
+func (s *FileStorage) Ping(_ context.Context) error {
 	return nil
 }

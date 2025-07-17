@@ -6,7 +6,9 @@ import (
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/handlers"
 	"github.com/repriest/url-shortener/internal/logger"
-	"github.com/repriest/url-shortener/internal/storage"
+	"github.com/repriest/url-shortener/internal/storage/file"
+	"github.com/repriest/url-shortener/internal/storage/memory"
+	"github.com/repriest/url-shortener/internal/storage/postgres"
 	t "github.com/repriest/url-shortener/internal/storage/types"
 	"github.com/repriest/url-shortener/internal/zipper"
 	"go.uber.org/zap"
@@ -29,44 +31,45 @@ func initLogger(cfg *config.Config) error {
 	return nil
 }
 
-func initStorage(cfg *config.Config) (*storage.Repository, error) {
-	var st t.Storage
-
+func initStorage(cfg *config.Config) (t.Storage, error) {
 	if cfg.DatabaseDSN != "" {
-		st, err := storage.NewPostgresStorage(cfg.DatabaseDSN)
+		st, err := postgres.NewPgStorage(cfg.DatabaseDSN)
 		if err != nil {
 			return nil, fmt.Errorf("could not connect to postgres: %w", err)
 		}
-		return storage.NewRepository(st)
+		return st, nil
+	}
 
-	} else if cfg.FileStoragePath != "" {
-		st, err := storage.NewFileStorage(cfg.FileStoragePath)
+	if cfg.FileStoragePath != "" {
+		st, err := file.NewFileStorage(cfg.FileStoragePath)
 		if err != nil {
 			return nil, fmt.Errorf("could not open file %s: %w", cfg.FileStoragePath, err)
 		}
-		return storage.NewRepository(st)
-
-	} else {
-		st = storage.NewMemoryStorage()
+		return st, nil
 	}
 
-	return storage.NewRepository(st)
+	return memory.NewMemoryStorage()
 }
 
-func closeStorage(st *storage.Repository) {
+func closeStorage(st t.Storage) {
 	if err := st.Close(); err != nil {
 		logger.Log.Error("could not close storage", zap.Error(err))
 	}
 }
 
-func initRouter(cfg *config.Config, st *storage.Repository) *chi.Mux {
+func initRouter(cfg *config.Config, st t.Storage) *chi.Mux {
 	h := handlers.NewHandler(cfg, st)
 	r := chi.NewRouter()
-	r.Post("/", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenHandler)))
-	r.Get("/{id}", logger.ResponseLogger(zipper.GzipMiddleware(h.ExpandHandler)))
-	r.Post("/api/shorten", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenJSONHandler)))
-	r.Get("/ping", logger.RequestLogger(zipper.GzipMiddleware(h.PingHandler)))
-	r.Post("/api/shorten/batch", logger.RequestLogger(zipper.GzipMiddleware(h.ShortenBatchHandler)))
+
+	r.Get("/ping", h.PingHandler)
+	r.Group(func(r chi.Router) {
+		r.Use(logger.RequestLogger, logger.ResponseLogger, zipper.GzipMiddleware)
+		r.Post("/", h.ShortenHandler)
+		r.Get("/{id}", h.ExpandHandler)
+		r.Post("/api/shorten", h.ShortenJSONHandler)
+		r.Post("/api/shorten/batch", h.ShortenBatchHandler)
+	})
+
 	return r
 }
 

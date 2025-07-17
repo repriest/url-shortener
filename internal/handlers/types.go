@@ -2,15 +2,15 @@ package handlers
 
 import (
 	"github.com/repriest/url-shortener/internal/config"
-	"github.com/repriest/url-shortener/internal/storage"
+	t "github.com/repriest/url-shortener/internal/storage/types"
 )
 
 type Handler struct {
 	cfg *config.Config
-	st  *storage.Repository
+	st  t.Storage
 }
 
-func NewHandler(cfg *config.Config, st *storage.Repository) *Handler {
+func NewHandler(cfg *config.Config, st t.Storage) *Handler {
 	return &Handler{cfg: cfg, st: st}
 }
 

@@ -9,14 +9,22 @@ import (
 	"time"
 )
 
-type pgStorage struct {
+type PGStorage struct {
 	db *sql.DB
 }
 
-func NewPgStorage(dsn string) (t.Storage, error) {
+func NewPgStorage(dsn string) (*PGStorage, error) {
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = db.PingContext(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	_, err = db.Exec(`
@@ -32,10 +40,10 @@ func NewPgStorage(dsn string) (t.Storage, error) {
 		return nil, fmt.Errorf("failed to create table urls: %w", err)
 	}
 
-	return &pgStorage{db: db}, nil
+	return &PGStorage{db: db}, nil
 }
 
-func (s pgStorage) Load() ([]t.URLEntry, error) {
+func (s PGStorage) Load() ([]t.URLEntry, error) {
 	rows, err := s.db.Query("SELECT uuid, short_url, original_url FROM urls")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query urls: %w", err)
@@ -57,7 +65,7 @@ func (s pgStorage) Load() ([]t.URLEntry, error) {
 	return entries, nil
 }
 
-func (s pgStorage) Append(entry t.URLEntry) error {
+func (s PGStorage) Append(entry t.URLEntry) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -90,11 +98,7 @@ func (s pgStorage) Append(entry t.URLEntry) error {
 	return nil
 }
 
-func (s pgStorage) Close() error {
-	return s.db.Close()
-}
-
-func (s pgStorage) BatchAppend(entries []t.URLEntry) error {
+func (s PGStorage) BatchAppend(entries []t.URLEntry) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -128,4 +132,12 @@ func (s pgStorage) BatchAppend(entries []t.URLEntry) error {
 	}
 
 	return nil
+}
+
+func (s PGStorage) Close() error {
+	return s.db.Close()
+}
+
+func (s PGStorage) Ping(ctx context.Context) error {
+	return s.db.PingContext(ctx)
 }
