@@ -241,6 +241,7 @@ func TestGzipCompression(t *testing.T) {
 		r.ServeHTTP(rec, req)
 
 		resp := rec.Result()
+		resp.Body.Close()
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		zr, err := gzip.NewReader(resp.Body)
