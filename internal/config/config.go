@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"github.com/caarlos0/env/v11"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap/zapcore"
 	"net"
 	"net/url"
@@ -17,6 +18,7 @@ type Config struct {
 	BaseURL         string `env:"BASE_URL"`
 	LogLevel        string `env:"LOG_LEVEL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	DatabaseDSN     string `env:"DATABASE_DSN"`
 }
 
 func NewConfig() (*Config, error) {
@@ -25,13 +27,15 @@ func NewConfig() (*Config, error) {
 		ServerAddr:      "localhost:8080",
 		BaseURL:         "http://localhost:8080",
 		LogLevel:        "info",
-		FileStoragePath: "url_store.json",
+		FileStoragePath: "", // url_store.json
+		DatabaseDSN:     "", // postgres://postgres:admin@localhost:5432/postgres?sslmode=disable
 	}
 
 	flag.StringVar(&cfg.ServerAddr, "a", defaults.ServerAddr, "HTTP server address")
 	flag.StringVar(&cfg.BaseURL, "b", defaults.BaseURL, "Base URL")
 	flag.StringVar(&cfg.LogLevel, "l", defaults.LogLevel, "Log level")
 	flag.StringVar(&cfg.FileStoragePath, "f", defaults.FileStoragePath, "File storage path")
+	flag.StringVar(&cfg.DatabaseDSN, "d", defaults.DatabaseDSN, "Database DSN")
 	flag.Parse()
 
 	// use env
@@ -49,9 +53,6 @@ func NewConfig() (*Config, error) {
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = defaults.LogLevel
 	}
-	if cfg.FileStoragePath == "" {
-		cfg.FileStoragePath = defaults.FileStoragePath
-	}
 
 	// validate
 	if err := validateServerAddr(cfg.ServerAddr); err != nil {
@@ -63,8 +64,15 @@ func NewConfig() (*Config, error) {
 	if err := validateLogLevel(cfg.LogLevel); err != nil {
 		return nil, err
 	}
-	if err := validateFileStoragePath(cfg.FileStoragePath); err != nil {
-		return nil, err
+	if cfg.FileStoragePath != "" {
+		if err := validateFileStoragePath(cfg.FileStoragePath); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.DatabaseDSN != "" {
+		if err := validateDatabaseDSN(cfg.DatabaseDSN); err != nil {
+			return nil, err
+		}
 	}
 
 	return cfg, nil
@@ -101,11 +109,6 @@ func validateBaseURL(baseURL string) error {
 }
 
 func validateFileStoragePath(path string) error {
-	// check if the path is empty
-	if path == "" {
-		return errors.New("empty file storage path")
-	}
-
 	// check if the path is a dir
 	info, err := os.Stat(path)
 	if err == nil {
@@ -113,5 +116,14 @@ func validateFileStoragePath(path string) error {
 			return fmt.Errorf("file storage path cannot be a directory: %s", path)
 		}
 	}
+	return nil
+}
+
+func validateDatabaseDSN(dsn string) error {
+	_, err := url.Parse(dsn)
+	if err != nil {
+		return fmt.Errorf("invalid Database DSN: %w", err)
+	}
+
 	return nil
 }

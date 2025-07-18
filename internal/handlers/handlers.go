@@ -1,51 +1,24 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"github.com/go-chi/chi/v5"
-	"github.com/repriest/url-shortener/internal/config"
-	"github.com/repriest/url-shortener/internal/storage"
+	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
+	t "github.com/repriest/url-shortener/internal/storage/types"
 	"github.com/repriest/url-shortener/internal/urlservice"
-	"io"
 	"net/http"
+	"time"
 )
 
-type Handler struct {
-	cfg *config.Config
-	st  *storage.Repository
-}
-
-func NewHandler(cfg *config.Config, st *storage.Repository) *Handler {
-	return &Handler{cfg: cfg, st: st}
-}
-
-type ShortenRequest struct {
-	URL string `json:"url"`
-}
-
-type ShortenResponse struct {
-	Result string `json:"result"`
-}
-
-func readRequestBody(r *http.Request) ([]byte, error) {
-	body, err := io.ReadAll(r.Body)
-	defer r.Body.Close()
-	if err != nil {
-		return nil, err
-	}
-	return body, nil
-}
-
 func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
-	// read body
-	body, err := readRequestBody(r)
+	longURL, err := getLongURL(r)
 	if err != nil {
-		http.Error(w, "Could not read body", http.StatusBadRequest)
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
-
-	// check if URL is empty
-	longURL := string(body)
 	if longURL == "" {
 		w.WriteHeader(http.StatusCreated)
 		return
@@ -57,18 +30,39 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 		return
 	}
+	responseURL := h.cfg.BaseURL + "/" + shortURL
 
-	// write shortened URL
-	w.WriteHeader(http.StatusCreated)
-	if _, err := w.Write([]byte(h.cfg.BaseURL + "/" + shortURL)); err != nil {
-		http.Error(w, "Could not write URL", http.StatusInternalServerError)
+	entry := t.URLEntry{
+		UUID:        uuid.New().String(),
+		ShortURL:    shortURL,
+		OriginalURL: longURL,
+	}
+
+	// check existing shortURL
+	err = h.st.Append(entry)
+	if err != nil {
+		var urlConflictError *t.URLConflictError
+		if errors.As(err, &urlConflictError) { // get instance of URLConflictError if err matches
+			if urlConflictError.ShortURL != "" {
+				responseURL = h.cfg.BaseURL + "/" + urlConflictError.ShortURL
+			}
+			// write existing shortened URL
+			w.WriteHeader(http.StatusConflict)
+			if _, err := w.Write([]byte(responseURL)); err != nil {
+				http.Error(w, "Could not write URL", http.StatusInternalServerError)
+				return
+			}
+			return
+		}
+		http.Error(w, "Could not write URL to storage", http.StatusInternalServerError)
 		return
 	}
 
-	// append entry uuid - shorturl - longurl to file
-	err = h.st.AddNewEntry(shortURL, longURL)
-	if err != nil {
+	// write response
+	w.WriteHeader(http.StatusCreated)
+	if _, err := w.Write([]byte(responseURL)); err != nil {
 		http.Error(w, "Could not write URL", http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -77,9 +71,9 @@ func (h *Handler) ExpandHandler(w http.ResponseWriter, r *http.Request) {
 	longURL, err := urlservice.ExpandURL(shortURL)
 	if err != nil {
 		http.Error(w, "Could not decode URL", http.StatusBadRequest)
+		return
 	}
-
-	http.Redirect(w, r, string(longURL), http.StatusTemporaryRedirect)
+	http.Redirect(w, r, longURL, http.StatusTemporaryRedirect)
 }
 
 func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
@@ -108,9 +102,116 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 		return
 	}
+	responseURL := ShortenResponse{h.cfg.BaseURL + "/" + shortURL}
+
+	entry := t.URLEntry{
+		UUID:        uuid.New().String(),
+		ShortURL:    shortURL,
+		OriginalURL: req.URL,
+	}
+
+	// check existing shortURL
+	err = h.st.Append(entry)
+	if err != nil {
+		var urlConflictError *t.URLConflictError
+		if errors.As(err, &urlConflictError) { // get instance of URLConflictError if err matches
+			if urlConflictError.ShortURL != "" {
+				responseURL = ShortenResponse{h.cfg.BaseURL + "/" + urlConflictError.ShortURL}
+			}
+			// write existing shortened URL
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			respJSON, err := json.Marshal(responseURL)
+			if err != nil {
+				http.Error(w, "Could not encode response", http.StatusInternalServerError)
+				return
+			}
+			writeResponse(w, respJSON)
+			return
+		}
+		http.Error(w, "Could not write URL to storage", http.StatusInternalServerError)
+		return
+	}
 
 	// write shortened URL
-	resp := ShortenResponse{Result: h.cfg.BaseURL + "/" + shortURL}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	respJSON, err := json.Marshal(responseURL)
+	if err != nil {
+		http.Error(w, "Could not encode response", http.StatusInternalServerError)
+		return
+	}
+	writeResponse(w, respJSON)
+}
+
+func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.DatabaseDSN == "" {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := h.st.Ping(ctx)
+	if err != nil {
+		http.Error(w, "Failed to ping database", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
+	var req []ShortenBatchRequest
+	var resp []ShortenBatchResponse
+
+	// read body
+	body, err := readRequestBody(r)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+	if len(req) == 0 {
+		http.Error(w, "Empty batch", http.StatusBadRequest)
+		return
+	}
+
+	var entries []t.URLEntry
+
+	// parese entries
+	for _, reqEntry := range req {
+		if reqEntry.OriginalURL == "" {
+			http.Error(w, "Empty URL", http.StatusBadRequest)
+			return
+		}
+		shortURL, err := urlservice.ShortenURL(reqEntry.OriginalURL)
+		if err != nil {
+			http.Error(w, "Could not shorten URL", http.StatusBadRequest)
+			return
+		}
+		entry := t.URLEntry{
+			UUID:        reqEntry.CorrelationID,
+			ShortURL:    shortURL,
+			OriginalURL: reqEntry.OriginalURL,
+		}
+		entries = append(entries, entry)
+		resp = append(resp, ShortenBatchResponse{
+			CorrelationID: reqEntry.CorrelationID,
+			ShortURL:      h.cfg.BaseURL + "/" + shortURL,
+		})
+	}
+
+	err = h.st.BatchAppend(entries)
+	if err != nil {
+		http.Error(w, "Failed to batch append", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	respJSON, err := json.Marshal(resp)
@@ -118,11 +219,5 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not encode response", http.StatusInternalServerError)
 		return
 	}
-	w.Write(respJSON)
-
-	// append entry uuid - shorturl - longurl to file
-	err = h.st.AddNewEntry(shortURL, req.URL)
-	if err != nil {
-		http.Error(w, "Could not write URL", http.StatusInternalServerError)
-	}
+	writeResponse(w, respJSON)
 }

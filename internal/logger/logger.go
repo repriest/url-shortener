@@ -1,10 +1,11 @@
 package logger
 
 import (
+	"bytes"
+	"go.uber.org/zap"
+	"io"
 	"net/http"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 type (
@@ -12,6 +13,7 @@ type (
 	responseData struct {
 		status int
 		size   int
+		body   bytes.Buffer
 	}
 
 	// добавляем реализацию http.ResponseWriter
@@ -48,21 +50,36 @@ func Initialize(level string) error {
 }
 
 // RequestLogger — middleware-логер для входящих HTTP-запросов.
-func RequestLogger(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func RequestLogger(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		Log.Info("got incoming HTTP request",
-			zap.String("URI", r.RequestURI),
+
+		var bodyBytes []byte
+		if r.Body != nil {
+			bodyBytes, _ = io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+		}
+
+		Log.Info("incoming HTTP request",
 			zap.String("method", r.Method),
+			zap.String("uri", r.RequestURI),
+			zap.String("content_type", r.Header.Get("Content-Type")),
+			zap.ByteString("body", bodyBytes),
 		)
-		h(w, r)
-		Log.Info("request finished",
+
+		h.ServeHTTP(w, r)
+
+		Log.Info("request completed",
 			zap.Duration("duration", time.Since(start)),
+			zap.String("content_type", r.Header.Get("Content-Type")),
+			zap.String("location", r.Header.Get("Location")),
 		)
-	}
+	})
 }
 
 func (r *loggingResponseWriter) Write(b []byte) (int, error) {
+	// сохраняем тело ответа для логирования
+	r.responseData.body.Write(b)
 	// записываем ответ, используя оригинальный http.ResponseWriter
 	size, err := r.ResponseWriter.Write(b)
 	r.responseData.size += size // захватываем размер
@@ -75,20 +92,29 @@ func (r *loggingResponseWriter) WriteHeader(statusCode int) {
 	r.responseData.status = statusCode // захватываем код статуса
 }
 
-func ResponseLogger(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func ResponseLogger(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		responseData := &responseData{
-			status: 0,
+			status: http.StatusOK, // по умолчанию 200 OK
 			size:   0,
 		}
+
 		lw := loggingResponseWriter{
 			ResponseWriter: w, // встраиваем оригинальный http.ResponseWriter
 			responseData:   responseData,
 		}
-		h(&lw, r)
-		Log.Info("got outgoing HTTP response",
+
+		h.ServeHTTP(&lw, r)
+		var responseBody string
+		if responseData.body.Len() > 0 {
+			responseBody = responseData.body.String()
+		}
+
+		Log.Info("outgoing HTTP response",
 			zap.Int("status", responseData.status),
-			zap.Int("response_size", responseData.size),
+			zap.String("request_URI", r.URL.String()),
+			zap.String("response_body", responseBody),
+			zap.String("content_type", w.Header().Get("Content-Type")),
 		)
-	}
+	})
 }
