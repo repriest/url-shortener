@@ -14,6 +14,10 @@ func NewHandler(cfg *config.Config, st t.Storage) *Handler {
 	return &Handler{cfg: cfg, st: st}
 }
 
+type contextKey string
+
+const userIDKey contextKey = "user_id"
+
 type ShortenRequest struct {
 	URL string `json:"url"`
 }

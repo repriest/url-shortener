@@ -17,6 +17,7 @@ type URLEntry struct {
 	UUID        string `json:"uuid"`
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
+	UserID      string `json:"user_id"`
 }
 
 type Storage interface {
@@ -25,4 +26,5 @@ type Storage interface {
 	BatchAppend(entries []URLEntry) error
 	Close() error
 	Ping(ctx context.Context) error
+	GetByUserID(userID string) ([]URLEntry, error)
 }

@@ -5,12 +5,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/handlers"
-	"github.com/repriest/url-shortener/internal/logger"
+	"github.com/repriest/url-shortener/internal/middleware/auth"
+	"github.com/repriest/url-shortener/internal/middleware/logger"
+	"github.com/repriest/url-shortener/internal/middleware/zipper"
 	"github.com/repriest/url-shortener/internal/storage/file"
 	"github.com/repriest/url-shortener/internal/storage/memory"
 	"github.com/repriest/url-shortener/internal/storage/postgres"
 	t "github.com/repriest/url-shortener/internal/storage/types"
-	"github.com/repriest/url-shortener/internal/zipper"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
@@ -63,11 +64,15 @@ func initRouter(cfg *config.Config, st t.Storage) *chi.Mux {
 
 	r.Get("/ping", h.PingHandler)
 	r.Group(func(r chi.Router) {
-		r.Use(logger.RequestLogger, logger.ResponseLogger, zipper.GzipMiddleware)
+		r.Use(logger.RequestLogger, logger.ResponseLogger, zipper.GzipMiddleware, auth.SetCookieMiddleware(cfg))
 		r.Post("/", h.ShortenHandler)
 		r.Get("/{id}", h.ExpandHandler)
 		r.Post("/api/shorten", h.ShortenJSONHandler)
 		r.Post("/api/shorten/batch", h.ShortenBatchHandler)
+	})
+	r.Group(func(r chi.Router) {
+		r.Use(auth.AuthRequiredMiddleware(cfg))
+		r.Get("/api/user/urls", h.GetUserURLsHandler)
 	})
 
 	return r

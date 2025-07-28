@@ -8,7 +8,6 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	t "github.com/repriest/url-shortener/internal/storage/types"
-	"github.com/repriest/url-shortener/internal/urlservice"
 	"net/http"
 	"time"
 )
@@ -25,7 +24,7 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// shorten URL
-	shortURL, err := urlservice.ShortenURL(longURL)
+	shortURL, err := shortenURL(longURL)
 	if err != nil {
 		http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 		return
@@ -36,6 +35,7 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 		UUID:        uuid.New().String(),
 		ShortURL:    shortURL,
 		OriginalURL: longURL,
+		UserID:      r.Context().Value(userIDKey).(string),
 	}
 
 	// check existing shortURL
@@ -68,7 +68,7 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ExpandHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := chi.URLParam(r, "id")
-	longURL, err := urlservice.ExpandURL(shortURL)
+	longURL, err := expandURL(shortURL)
 	if err != nil {
 		http.Error(w, "Could not decode URL", http.StatusBadRequest)
 		return
@@ -97,7 +97,7 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// shorten URL
-	shortURL, err := urlservice.ShortenURL(req.URL)
+	shortURL, err := shortenURL(req.URL)
 	if err != nil {
 		http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 		return
@@ -108,6 +108,7 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 		UUID:        uuid.New().String(),
 		ShortURL:    shortURL,
 		OriginalURL: req.URL,
+		UserID:      r.Context().Value(userIDKey).(string),
 	}
 
 	// check existing shortURL
@@ -121,12 +122,11 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 			// write existing shortened URL
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusConflict)
-			respJSON, err := json.Marshal(responseURL)
+			err := json.NewEncoder(w).Encode(responseURL)
 			if err != nil {
 				http.Error(w, "Could not encode response", http.StatusInternalServerError)
 				return
 			}
-			writeResponse(w, respJSON)
 			return
 		}
 		http.Error(w, "Could not write URL to storage", http.StatusInternalServerError)
@@ -136,12 +136,11 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 	// write shortened URL
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	respJSON, err := json.Marshal(responseURL)
+	err = json.NewEncoder(w).Encode(responseURL)
 	if err != nil {
 		http.Error(w, "Could not encode response", http.StatusInternalServerError)
 		return
 	}
-	writeResponse(w, respJSON)
 }
 
 func (h *Handler) PingHandler(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +181,7 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var entries []t.URLEntry
+	userID := r.Context().Value(userIDKey).(string)
 
 	// parese entries
 	for _, reqEntry := range req {
@@ -189,7 +189,7 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Empty URL", http.StatusBadRequest)
 			return
 		}
-		shortURL, err := urlservice.ShortenURL(reqEntry.OriginalURL)
+		shortURL, err := shortenURL(reqEntry.OriginalURL)
 		if err != nil {
 			http.Error(w, "Could not shorten URL", http.StatusBadRequest)
 			return
@@ -198,6 +198,7 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 			UUID:        reqEntry.CorrelationID,
 			ShortURL:    shortURL,
 			OriginalURL: reqEntry.OriginalURL,
+			UserID:      userID,
 		}
 		entries = append(entries, entry)
 		resp = append(resp, ShortenBatchResponse{
@@ -214,10 +215,33 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	respJSON, err := json.Marshal(resp)
+	err = json.NewEncoder(w).Encode(resp)
 	if err != nil {
 		http.Error(w, "Could not encode response", http.StatusInternalServerError)
 		return
 	}
-	writeResponse(w, respJSON)
+}
+
+func (h *Handler) GetUserURLsHandler(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value(userIDKey).(string)
+	urls, err := h.st.GetByUserID(userID)
+	if err != nil {
+		http.Error(w, "Could not get URLs", http.StatusInternalServerError)
+		return
+	}
+	if len(urls) == 0 {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	response := make([]map[string]string, len(urls))
+	for i, urlEntry := range urls {
+		response[i] = map[string]string{
+			"short_url":    h.cfg.BaseURL + "/" + urlEntry.ShortURL,
+			"original_url": urlEntry.OriginalURL,
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Could not encode response", http.StatusInternalServerError)
+	}
 }
