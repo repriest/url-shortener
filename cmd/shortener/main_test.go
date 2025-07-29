@@ -250,6 +250,7 @@ func TestGzipCompression(t *testing.T) {
 		r.ServeHTTP(rec, req)
 
 		resp := rec.Result()
+		defer resp.Body.Close()
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		zr, err := gzip.NewReader(resp.Body)
@@ -257,8 +258,8 @@ func TestGzipCompression(t *testing.T) {
 		defer zr.Close()
 
 		respBody, err := io.ReadAll(zr)
-		require.NoError(t, err)
 
+		require.NoError(t, err)
 		require.Equal(t, strings.TrimSpace(string(respBody)), successBody)
 	})
 }
@@ -357,5 +358,6 @@ func TestGetUserURLsHandler(t *testing.T) {
 	r.ServeHTTP(rec, req)
 
 	resp := rec.Result()
+	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }

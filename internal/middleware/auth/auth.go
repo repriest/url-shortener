@@ -78,6 +78,14 @@ func SetCookieMiddleware(cfg *config.Config) func(next http.Handler) http.Handle
 func AuthRequiredMiddleware(cfg *config.Config) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userIDVal := r.Context().Value(contextkeys.UserIDKey)
+			if userIDVal != nil {
+				if userID, ok := userIDVal.(string); ok && userID != "" {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+
 			cookie, err := r.Cookie("session_id")
 			if err != nil || cookie == nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
