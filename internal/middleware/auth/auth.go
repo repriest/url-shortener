@@ -12,10 +12,6 @@ import (
 	"strings"
 )
 
-type contextKey string
-
-const userIDKey contextKey = "user_id"
-
 func signValue(value string, secret string) string {
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write([]byte(value))
@@ -72,7 +68,7 @@ func SetCookieMiddleware(cfg *config.Config) func(next http.Handler) http.Handle
 					SameSite: http.SameSiteStrictMode,
 				})
 			}
-			ctx := context.WithValue(r.Context(), userIDKey, userID)
+			ctx := context.WithValue(r.Context(), "user_id", userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -91,7 +87,7 @@ func AuthRequiredMiddleware(cfg *config.Config) func(next http.Handler) http.Han
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			ctx := context.WithValue(r.Context(), userIDKey, userID)
+			ctx := context.WithValue(r.Context(), "user_id", userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

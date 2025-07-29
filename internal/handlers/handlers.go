@@ -35,7 +35,7 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 		UUID:        uuid.New().String(),
 		ShortURL:    shortURL,
 		OriginalURL: longURL,
-		UserID:      r.Context().Value(userIDKey).(string),
+		UserID:      r.Context().Value("user_id").(string),
 	}
 
 	// check existing shortURL
@@ -108,7 +108,7 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 		UUID:        uuid.New().String(),
 		ShortURL:    shortURL,
 		OriginalURL: req.URL,
-		UserID:      r.Context().Value(userIDKey).(string),
+		UserID:      r.Context().Value("user_id").(string),
 	}
 
 	// check existing shortURL
@@ -181,7 +181,7 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var entries []t.URLEntry
-	userID := r.Context().Value(userIDKey).(string)
+	userID := r.Context().Value("user_id").(string)
 
 	// parese entries
 	for _, reqEntry := range req {
@@ -223,7 +223,7 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetUserURLsHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(userIDKey).(string)
+	userID := r.Context().Value("user_id").(string)
 	urls, err := h.st.GetByUserID(userID)
 	if err != nil {
 		http.Error(w, "Could not get URLs", http.StatusInternalServerError)

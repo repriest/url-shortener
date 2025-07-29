@@ -71,7 +71,7 @@ func initRouter(cfg *config.Config, st t.Storage) *chi.Mux {
 		r.Post("/api/shorten/batch", h.ShortenBatchHandler)
 	})
 	r.Group(func(r chi.Router) {
-		r.Use(auth.AuthRequiredMiddleware(cfg))
+		r.Use(logger.RequestLogger, logger.ResponseLogger, zipper.GzipMiddleware, auth.AuthRequiredMiddleware(cfg))
 		r.Get("/api/user/urls", h.GetUserURLsHandler)
 	})
 
