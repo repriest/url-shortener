@@ -32,11 +32,18 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	responseURL := h.cfg.BaseURL + "/" + shortURL
 
+	userIDVal := r.Context().Value(contextkeys.UserIDKey)
+	userID, ok := userIDVal.(string)
+	if !ok {
+		http.Error(w, "User ID not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	entry := t.URLEntry{
 		UUID:        uuid.New().String(),
 		ShortURL:    shortURL,
 		OriginalURL: longURL,
-		UserID:      r.Context().Value(contextkeys.UserIDKey).(string),
+		UserID:      userID,
 	}
 
 	// check existing shortURL
@@ -105,11 +112,18 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	responseURL := ShortenResponse{h.cfg.BaseURL + "/" + shortURL}
 
+	userIDVal := r.Context().Value(contextkeys.UserIDKey)
+	userID, ok := userIDVal.(string)
+	if !ok {
+		http.Error(w, "User ID not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	entry := t.URLEntry{
 		UUID:        uuid.New().String(),
 		ShortURL:    shortURL,
 		OriginalURL: req.URL,
-		UserID:      r.Context().Value(contextkeys.UserIDKey).(string),
+		UserID:      userID,
 	}
 
 	// check existing shortURL
@@ -182,7 +196,12 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var entries []t.URLEntry
-	userID := r.Context().Value(contextkeys.UserIDKey).(string)
+	userIDVal := r.Context().Value(contextkeys.UserIDKey)
+	userID, ok := userIDVal.(string)
+	if !ok {
+		http.Error(w, "User ID not found in context", http.StatusInternalServerError)
+		return
+	}
 
 	// parese entries
 	for _, reqEntry := range req {
@@ -224,7 +243,13 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetUserURLsHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value(contextkeys.UserIDKey).(string)
+	userIDVal := r.Context().Value(contextkeys.UserIDKey)
+	userID, ok := userIDVal.(string)
+	if !ok {
+		http.Error(w, "User ID not found in context", http.StatusInternalServerError)
+		return
+	}
+
 	urls, err := h.st.GetByUserID(userID)
 	if err != nil {
 		http.Error(w, "Could not get URLs", http.StatusInternalServerError)

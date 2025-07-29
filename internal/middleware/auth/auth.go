@@ -65,7 +65,7 @@ func SetCookieMiddleware(cfg *config.Config) func(next http.Handler) http.Handle
 					Value:    signedValue,
 					Path:     "/",
 					HttpOnly: true,
-					Secure:   true,
+					Secure:   false,
 					SameSite: http.SameSiteStrictMode,
 				})
 			}
