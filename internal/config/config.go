@@ -30,7 +30,7 @@ func NewConfig() (*Config, error) {
 		LogLevel:        "info",
 		FileStoragePath: "", // url_store.json
 		DatabaseDSN:     "", // postgres://postgres:admin@localhost:5432/postgres?sslmode=disable
-		CookieSecret:    "",
+		CookieSecret:    "default_cookie_secret",
 	}
 
 	flag.StringVar(&cfg.ServerAddr, "a", defaults.ServerAddr, "HTTP server address")
@@ -57,7 +57,7 @@ func NewConfig() (*Config, error) {
 		cfg.LogLevel = defaults.LogLevel
 	}
 	if cfg.CookieSecret == "" {
-		return nil, errors.New("empty cookie secret")
+		cfg.CookieSecret = defaults.CookieSecret
 	}
 
 	// validate
