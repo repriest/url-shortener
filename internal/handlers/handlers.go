@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/repriest/url-shortener/internal/contextkeys"
 	t "github.com/repriest/url-shortener/internal/storage/types"
 	"net/http"
 	"time"
@@ -35,7 +36,7 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 		UUID:        uuid.New().String(),
 		ShortURL:    shortURL,
 		OriginalURL: longURL,
-		UserID:      r.Context().Value("user_id").(string),
+		UserID:      r.Context().Value(contextkeys.UserIDKey).(string),
 	}
 
 	// check existing shortURL
@@ -108,7 +109,7 @@ func (h *Handler) ShortenJSONHandler(w http.ResponseWriter, r *http.Request) {
 		UUID:        uuid.New().String(),
 		ShortURL:    shortURL,
 		OriginalURL: req.URL,
-		UserID:      r.Context().Value("user_id").(string),
+		UserID:      r.Context().Value(contextkeys.UserIDKey).(string),
 	}
 
 	// check existing shortURL
@@ -181,7 +182,7 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var entries []t.URLEntry
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(contextkeys.UserIDKey).(string)
 
 	// parese entries
 	for _, reqEntry := range req {
@@ -223,7 +224,7 @@ func (h *Handler) ShortenBatchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetUserURLsHandler(w http.ResponseWriter, r *http.Request) {
-	userID := r.Context().Value("user_id").(string)
+	userID := r.Context().Value(contextkeys.UserIDKey).(string)
 	urls, err := h.st.GetByUserID(userID)
 	if err != nil {
 		http.Error(w, "Could not get URLs", http.StatusInternalServerError)

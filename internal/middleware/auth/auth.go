@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"github.com/google/uuid"
 	"github.com/repriest/url-shortener/internal/config"
+	"github.com/repriest/url-shortener/internal/contextkeys"
 	"net/http"
 	"strings"
 )
@@ -68,7 +69,7 @@ func SetCookieMiddleware(cfg *config.Config) func(next http.Handler) http.Handle
 					SameSite: http.SameSiteStrictMode,
 				})
 			}
-			ctx := context.WithValue(r.Context(), "user_id", userID)
+			ctx := context.WithValue(r.Context(), contextkeys.UserIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -87,7 +88,7 @@ func AuthRequiredMiddleware(cfg *config.Config) func(next http.Handler) http.Han
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
-			ctx := context.WithValue(r.Context(), "user_id", userID)
+			ctx := context.WithValue(r.Context(), contextkeys.UserIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
