@@ -19,6 +19,7 @@ type Config struct {
 	LogLevel        string `env:"LOG_LEVEL"`
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	DatabaseDSN     string `env:"DATABASE_DSN"`
+	CookieSecret    string `env:"COOKIE_SECRET"`
 }
 
 func NewConfig() (*Config, error) {
@@ -29,6 +30,7 @@ func NewConfig() (*Config, error) {
 		LogLevel:        "info",
 		FileStoragePath: "", // url_store.json
 		DatabaseDSN:     "", // postgres://postgres:admin@localhost:5432/postgres?sslmode=disable
+		CookieSecret:    "default_cookie_secret",
 	}
 
 	flag.StringVar(&cfg.ServerAddr, "a", defaults.ServerAddr, "HTTP server address")
@@ -36,6 +38,7 @@ func NewConfig() (*Config, error) {
 	flag.StringVar(&cfg.LogLevel, "l", defaults.LogLevel, "Log level")
 	flag.StringVar(&cfg.FileStoragePath, "f", defaults.FileStoragePath, "File storage path")
 	flag.StringVar(&cfg.DatabaseDSN, "d", defaults.DatabaseDSN, "Database DSN")
+	flag.StringVar(&cfg.CookieSecret, "c", defaults.CookieSecret, "Cookie secret key")
 	flag.Parse()
 
 	// use env
@@ -52,6 +55,9 @@ func NewConfig() (*Config, error) {
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = defaults.LogLevel
+	}
+	if cfg.CookieSecret == "" {
+		cfg.CookieSecret = defaults.CookieSecret
 	}
 
 	// validate

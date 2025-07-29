@@ -36,3 +36,13 @@ func (s *MemoryStorage) Close() error {
 func (s *MemoryStorage) Ping(ctx context.Context) error {
 	return nil
 }
+
+func (s *MemoryStorage) GetByUserID(userID string) ([]t.URLEntry, error) {
+	var userEntries []t.URLEntry
+	for _, entry := range s.entries {
+		if entry.UserID == userID {
+			userEntries = append(userEntries, entry)
+		}
+	}
+	return userEntries, nil
+}

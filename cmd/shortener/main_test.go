@@ -6,8 +6,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/repriest/url-shortener/internal/config"
 	"github.com/repriest/url-shortener/internal/handlers"
+	"github.com/repriest/url-shortener/internal/middleware/auth"
+	"github.com/repriest/url-shortener/internal/middleware/zipper"
 	"github.com/repriest/url-shortener/internal/storage/memory"
-	"github.com/repriest/url-shortener/internal/zipper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -34,6 +35,10 @@ func TestShortenHandler(t *testing.T) {
 	require.NoError(t, err)
 	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
+
+	r := chi.NewRouter()
+	r.Use(auth.SetCookieMiddleware(cfg))
+	r.Post("/", h.ShortenHandler)
 
 	tt := []struct {
 		name       string
@@ -67,9 +72,9 @@ func TestShortenHandler(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(tc.method, cfg.ServerAddr, strings.NewReader(tc.body))
+			req := httptest.NewRequest(tc.method, "/", strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
-			h.ShortenHandler(rec, req)
+			r.ServeHTTP(rec, req)
 
 			resp := rec.Result()
 			respBody, err := io.ReadAll(resp.Body)
@@ -133,6 +138,10 @@ func TestShortenJSONHandler(t *testing.T) {
 	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
 
+	r := chi.NewRouter()
+	r.Use(auth.SetCookieMiddleware(cfg))
+	r.Post("/api/shorten", h.ShortenJSONHandler)
+
 	tt := []struct {
 		name        string
 		method      string
@@ -153,7 +162,7 @@ func TestShortenJSONHandler(t *testing.T) {
 			name:        "InvalidJSON",
 			method:      http.MethodPost,
 			body:        `{not: json}`,
-			response:    "Invalid JSON\n",
+			response:    "Invalid JSON",
 			statusCode:  http.StatusBadRequest,
 			contentType: "text/plain; charset=utf-8",
 		},
@@ -161,7 +170,7 @@ func TestShortenJSONHandler(t *testing.T) {
 			name:        "NoURL",
 			method:      http.MethodPost,
 			body:        `{"foo":"bar"}`,
-			response:    "URL is required\n",
+			response:    "URL is required",
 			statusCode:  http.StatusBadRequest,
 			contentType: "text/plain; charset=utf-8",
 		},
@@ -169,7 +178,7 @@ func TestShortenJSONHandler(t *testing.T) {
 			name:        "InvalidURL",
 			method:      http.MethodPost,
 			body:        `{"url":"badurl!@#$"}`,
-			response:    "Could not shorten URL\n",
+			response:    "Could not shorten URL",
 			statusCode:  http.StatusBadRequest,
 			contentType: "text/plain; charset=utf-8",
 		},
@@ -179,7 +188,7 @@ func TestShortenJSONHandler(t *testing.T) {
 			req := httptest.NewRequest(tc.method, "/api/shorten", strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
 
-			h.ShortenJSONHandler(rec, req)
+			r.ServeHTTP(rec, req)
 
 			resp := rec.Result()
 			respBody, err := io.ReadAll(resp.Body)
@@ -188,7 +197,7 @@ func TestShortenJSONHandler(t *testing.T) {
 
 			assert.Equal(t, tc.statusCode, resp.StatusCode)
 			assert.Equal(t, tc.contentType, resp.Header.Get("Content-Type"))
-			assert.Equal(t, tc.response, string(respBody))
+			assert.Equal(t, tc.response, strings.TrimSpace(string(respBody)))
 		})
 	}
 }
@@ -200,7 +209,7 @@ func TestGzipCompression(t *testing.T) {
 	h := handlers.NewHandler(cfg, st)
 	r := chi.NewRouter()
 	r.Group(func(r chi.Router) {
-		r.Use(zipper.GzipMiddleware)
+		r.Use(zipper.GzipMiddleware, auth.SetCookieMiddleware(cfg))
 		r.Post("/", h.ShortenHandler)
 	})
 
@@ -228,7 +237,7 @@ func TestGzipCompression(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
-		assert.Equal(t, string(respBody), successBody)
+		assert.Equal(t, strings.TrimSpace(string(respBody)), successBody)
 	})
 
 	// decompress test
@@ -241,7 +250,7 @@ func TestGzipCompression(t *testing.T) {
 		r.ServeHTTP(rec, req)
 
 		resp := rec.Result()
-		resp.Body.Close()
+		defer resp.Body.Close()
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		zr, err := gzip.NewReader(resp.Body)
@@ -249,9 +258,9 @@ func TestGzipCompression(t *testing.T) {
 		defer zr.Close()
 
 		respBody, err := io.ReadAll(zr)
-		require.NoError(t, err)
 
-		require.Equal(t, string(respBody), successBody)
+		require.NoError(t, err)
+		require.Equal(t, strings.TrimSpace(string(respBody)), successBody)
 	})
 }
 
@@ -260,6 +269,10 @@ func TestShortenBatchHandler(t *testing.T) {
 	require.NoError(t, err)
 	defer st.Close()
 	h := handlers.NewHandler(cfg, st)
+
+	r := chi.NewRouter()
+	r.Use(auth.SetCookieMiddleware(cfg))
+	r.Post("/api/shorten/batch", h.ShortenBatchHandler)
 
 	tt := []struct {
 		name        string
@@ -281,7 +294,7 @@ func TestShortenBatchHandler(t *testing.T) {
 			name:        "EmptyBatch",
 			method:      http.MethodPost,
 			body:        `[]`,
-			response:    "Empty batch\n",
+			response:    "Empty batch",
 			statusCode:  http.StatusBadRequest,
 			contentType: "text/plain; charset=utf-8",
 		},
@@ -289,7 +302,7 @@ func TestShortenBatchHandler(t *testing.T) {
 			name:        "InvalidJSON",
 			method:      http.MethodPost,
 			body:        `{not: json}`,
-			response:    "Invalid JSON\n",
+			response:    "Invalid JSON",
 			statusCode:  http.StatusBadRequest,
 			contentType: "text/plain; charset=utf-8",
 		},
@@ -297,7 +310,7 @@ func TestShortenBatchHandler(t *testing.T) {
 			name:        "EmptyURL",
 			method:      http.MethodPost,
 			body:        `[{"correlation_id":"1","original_url":""}]`,
-			response:    "Empty URL\n",
+			response:    "Empty URL",
 			statusCode:  http.StatusBadRequest,
 			contentType: "text/plain; charset=utf-8",
 		},
@@ -305,7 +318,7 @@ func TestShortenBatchHandler(t *testing.T) {
 			name:        "InvalidURL",
 			method:      http.MethodPost,
 			body:        `[{"correlation_id":"1","original_url":"badurl!@#$"}]`,
-			response:    "Could not shorten URL\n",
+			response:    "Could not shorten URL",
 			statusCode:  http.StatusBadRequest,
 			contentType: "text/plain; charset=utf-8",
 		},
@@ -316,7 +329,7 @@ func TestShortenBatchHandler(t *testing.T) {
 			req := httptest.NewRequest(tc.method, "/api/shorten/batch", strings.NewReader(tc.body))
 			rec := httptest.NewRecorder()
 
-			h.ShortenBatchHandler(rec, req)
+			r.ServeHTTP(rec, req)
 
 			resp := rec.Result()
 			respBody, err := io.ReadAll(resp.Body)
@@ -325,7 +338,26 @@ func TestShortenBatchHandler(t *testing.T) {
 
 			assert.Equal(t, tc.statusCode, resp.StatusCode)
 			assert.Equal(t, tc.contentType, resp.Header.Get("Content-Type"))
-			assert.Equal(t, tc.response, string(respBody))
+			assert.Equal(t, tc.response, strings.TrimSpace(string(respBody)))
 		})
 	}
+}
+
+func TestGetUserURLsHandler(t *testing.T) {
+	st, err := memory.NewMemoryStorage()
+	require.NoError(t, err)
+	defer st.Close()
+	h := handlers.NewHandler(cfg, st)
+
+	r := chi.NewRouter()
+	r.Use(auth.SetCookieMiddleware(cfg))
+	r.Get("/api/user/urls", h.GetUserURLsHandler)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/user/urls", nil)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, req)
+
+	resp := rec.Result()
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }

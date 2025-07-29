@@ -90,3 +90,17 @@ func (s *FileStorage) Close() error {
 func (s *FileStorage) Ping(_ context.Context) error {
 	return nil
 }
+
+func (s *FileStorage) GetByUserID(userID string) ([]t.URLEntry, error) {
+	entries, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+	var userEntries []t.URLEntry
+	for _, entry := range entries {
+		if entry.UserID == userID {
+			userEntries = append(userEntries, entry)
+		}
+	}
+	return userEntries, nil
+}

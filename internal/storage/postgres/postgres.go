@@ -31,7 +31,8 @@ func NewPgStorage(dsn string) (*PGStorage, error) {
 		CREATE TABLE IF NOT EXISTS urls (
 			uuid TEXT PRIMARY KEY,
 			short_url TEXT NOT NULL,
-			original_url TEXT NOT NULL UNIQUE
+			original_url TEXT NOT NULL UNIQUE,
+			user_id TEXT NOT NULL	
 		)
 	`)
 
@@ -44,7 +45,7 @@ func NewPgStorage(dsn string) (*PGStorage, error) {
 }
 
 func (s PGStorage) Load() ([]t.URLEntry, error) {
-	rows, err := s.db.Query("SELECT uuid, short_url, original_url FROM urls")
+	rows, err := s.db.Query("SELECT uuid, short_url, original_url, user_id FROM urls")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query urls: %w", err)
 	}
@@ -53,7 +54,7 @@ func (s PGStorage) Load() ([]t.URLEntry, error) {
 	var entries []t.URLEntry
 	for rows.Next() {
 		entry := t.URLEntry{}
-		err := rows.Scan(&entry.UUID, &entry.ShortURL, &entry.OriginalURL)
+		err := rows.Scan(&entry.UUID, &entry.ShortURL, &entry.OriginalURL, &entry.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan row: %w", err)
 		}
@@ -71,10 +72,10 @@ func (s PGStorage) Append(entry t.URLEntry) error {
 
 	// try to insert entry
 	result, err := s.db.ExecContext(ctx, `
-			INSERT INTO urls (uuid, short_url, original_url) 
-			VALUES ($1, $2, $3)
+			INSERT INTO urls (uuid, short_url, original_url, user_id) 
+			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (original_url) DO NOTHING 
-		`, entry.UUID, entry.ShortURL, entry.OriginalURL)
+		`, entry.UUID, entry.ShortURL, entry.OriginalURL, entry.UserID)
 	if err != nil {
 		return fmt.Errorf("failed to insert url: %w", err)
 	}
@@ -110,8 +111,8 @@ func (s PGStorage) BatchAppend(entries []t.URLEntry) error {
 
 	// prepare insert entry statement
 	stmt, err := tx.PrepareContext(ctx, `
-			INSERT INTO urls (uuid, short_url, original_url) 
-			VALUES ($1, $2, $3)
+			INSERT INTO urls (uuid, short_url, original_url, user_id) 
+			VALUES ($1, $2, $3, $4)
 			ON CONFLICT (original_url) DO NOTHING 
 		`)
 	if err != nil {
@@ -121,7 +122,7 @@ func (s PGStorage) BatchAppend(entries []t.URLEntry) error {
 
 	// execute insert entry statement
 	for _, entry := range entries {
-		_, err = stmt.ExecContext(ctx, entry.UUID, entry.ShortURL, entry.OriginalURL)
+		_, err = stmt.ExecContext(ctx, entry.UUID, entry.ShortURL, entry.OriginalURL, entry.UserID)
 		if err != nil {
 			return fmt.Errorf("failed to insert entry: %w", err)
 		}
@@ -140,4 +141,26 @@ func (s PGStorage) Close() error {
 
 func (s PGStorage) Ping(ctx context.Context) error {
 	return s.db.PingContext(ctx)
+}
+
+func (s PGStorage) GetByUserID(userID string) ([]t.URLEntry, error) {
+	rows, err := s.db.Query("SELECT uuid, short_url, original_url, user_id FROM urls WHERE user_id = $1", userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query urls by user_id: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []t.URLEntry
+	for rows.Next() {
+		entry := t.URLEntry{}
+		err := rows.Scan(&entry.UUID, &entry.ShortURL, &entry.OriginalURL, &entry.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan row: %w", err)
+		}
+		entries = append(entries, entry)
+	}
+	if rows.Err() != nil {
+		return nil, fmt.Errorf("failed to read rows: %w", err)
+	}
+	return entries, nil
 }
