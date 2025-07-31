@@ -6,6 +6,7 @@ import (
 	"fmt"
 	t "github.com/repriest/url-shortener/internal/storage/types"
 	"os"
+	"slices"
 	"strings"
 )
 
@@ -103,4 +104,39 @@ func (s *FileStorage) GetByUserID(userID string) ([]t.URLEntry, error) {
 		}
 	}
 	return userEntries, nil
+}
+
+func (s *FileStorage) GetByShortURL(shortURL string) (*t.URLEntry, error) {
+	entries, err := s.Load()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.ShortURL == shortURL {
+			return &entry, nil
+		}
+	}
+
+	return nil, nil
+}
+
+func (s *FileStorage) QueueDelete(userID string, shortURLs []string) {
+	entries, err := s.Load()
+	if err != nil {
+		return
+	}
+
+	for i := range entries {
+		if entries[i].UserID == userID && slices.Contains(shortURLs, entries[i].ShortURL) {
+			entries[i].IsDeleted = true
+		}
+	}
+
+	s.file.Truncate(0)
+	s.file.Seek(0, 0)
+	for _, entry := range entries {
+		data, _ := json.Marshal(entry)
+		s.file.Write(append(data, '\n'))
+	}
 }

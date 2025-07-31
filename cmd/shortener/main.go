@@ -73,6 +73,7 @@ func initRouter(cfg *config.Config, st t.Storage) *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(logger.RequestLogger, logger.ResponseLogger, zipper.GzipMiddleware, auth.SetCookieMiddleware(cfg), auth.AuthRequiredMiddleware(cfg))
 		r.Get("/api/user/urls", h.GetUserURLsHandler)
+		r.Delete("/api/user/urls", h.DeleteURLsHandler)
 	})
 
 	return r

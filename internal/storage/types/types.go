@@ -18,6 +18,7 @@ type URLEntry struct {
 	ShortURL    string `json:"short_url"`
 	OriginalURL string `json:"original_url"`
 	UserID      string `json:"user_id"`
+	IsDeleted   bool   `json:"is_deleted"`
 }
 
 type Storage interface {
@@ -27,4 +28,6 @@ type Storage interface {
 	Close() error
 	Ping(ctx context.Context) error
 	GetByUserID(userID string) ([]URLEntry, error)
+	GetByShortURL(shortURL string) (*URLEntry, error)
+	QueueDelete(userID string, shortURLs []string)
 }

@@ -76,11 +76,22 @@ func (h *Handler) ShortenHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) ExpandHandler(w http.ResponseWriter, r *http.Request) {
 	shortURL := chi.URLParam(r, "id")
+	entry, err := h.st.GetByShortURL(shortURL)
+	if err != nil {
+		http.Error(w, "Could not get URL", http.StatusBadRequest)
+		return
+	}
+	if entry != nil && entry.IsDeleted {
+		http.Error(w, "URL deleted", http.StatusGone)
+		return
+	}
+
 	longURL, err := expandURL(shortURL)
 	if err != nil {
 		http.Error(w, "Could not decode URL", http.StatusBadRequest)
 		return
 	}
+
 	http.Redirect(w, r, longURL, http.StatusTemporaryRedirect)
 }
 
@@ -270,4 +281,22 @@ func (h *Handler) GetUserURLsHandler(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Could not encode response", http.StatusInternalServerError)
 	}
+}
+
+func (h *Handler) DeleteURLsHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(contextkeys.UserIDKey).(string)
+	if !ok {
+		http.Error(w, "User ID not found", http.StatusUnauthorized)
+		return
+	}
+
+	var shortURLs []string
+	err := json.NewDecoder(r.Body).Decode(&shortURLs)
+	if err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	h.st.QueueDelete(userID, shortURLs)
+	w.WriteHeader(http.StatusAccepted)
 }

@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"github.com/go-chi/chi/v5"
 	"github.com/repriest/url-shortener/internal/config"
+	"github.com/repriest/url-shortener/internal/contextkeys"
 	"github.com/repriest/url-shortener/internal/handlers"
 	"github.com/repriest/url-shortener/internal/middleware/auth"
 	"github.com/repriest/url-shortener/internal/middleware/zipper"
@@ -360,4 +362,24 @@ func TestGetUserURLsHandler(t *testing.T) {
 	resp := rec.Result()
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+}
+
+func TestDeleteURLsHandler(t *testing.T) {
+	st, err := memory.NewMemoryStorage()
+	require.NoError(t, err)
+	defer st.Close()
+	h := handlers.NewHandler(cfg, st)
+
+	r := chi.NewRouter()
+	r.Use(auth.SetCookieMiddleware(cfg))
+	r.Delete("/api/user/urls", h.DeleteURLsHandler)
+
+	body := `["asdfasdf", "qwerqwer"]`
+	req := httptest.NewRequest(http.MethodDelete, "/api/user/urls", strings.NewReader(body))
+	req = req.WithContext(context.WithValue(context.Background(), contextkeys.UserIDKey, "test-user"))
+	rec := httptest.NewRecorder()
+
+	r.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusAccepted, rec.Code)
 }
