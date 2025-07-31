@@ -29,6 +29,8 @@ func verifyCookie(cookieValue string, secret string) (bool, string) {
 	}
 	encodedValue := parts[0]
 	encodedSignature := parts[1]
+
+	// decode cookie
 	valueBytes, err := base64.URLEncoding.DecodeString(encodedValue)
 	if err != nil {
 		return false, ""
@@ -37,9 +39,13 @@ func verifyCookie(cookieValue string, secret string) (bool, string) {
 	if err != nil {
 		return false, ""
 	}
+
+	// verify sig
 	h := hmac.New(sha256.New, []byte(secret))
 	h.Write(valueBytes)
 	expectedSignature := h.Sum(nil)
+
+	// prevent timing attacks
 	if subtle.ConstantTimeCompare(signatureBytes, expectedSignature) != 1 {
 		return false, ""
 	}
@@ -49,14 +55,19 @@ func verifyCookie(cookieValue string, secret string) (bool, string) {
 func SetCookieMiddleware(cfg *config.Config) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// get session cookie
 			cookie, err := r.Cookie("session_id")
 			var userID string
+
+			// extract the user ID
 			if err == nil && cookie != nil {
 				isValid, id := verifyCookie(cookie.Value, cfg.CookieSecret)
 				if isValid {
 					userID = id
 				}
 			}
+
+			// create new cookie, if no userID
 			if userID == "" {
 				userID = uuid.New().String()
 				signedValue := signValue(userID, cfg.CookieSecret)
@@ -69,6 +80,8 @@ func SetCookieMiddleware(cfg *config.Config) func(next http.Handler) http.Handle
 					SameSite: http.SameSiteStrictMode,
 				})
 			}
+
+			// store userID in context for handlers
 			ctx := context.WithValue(r.Context(), contextkeys.UserIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -78,6 +91,7 @@ func SetCookieMiddleware(cfg *config.Config) func(next http.Handler) http.Handle
 func AuthRequiredMiddleware(cfg *config.Config) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// check userID in ctx
 			userIDVal := r.Context().Value(contextkeys.UserIDKey)
 			if userIDVal != nil {
 				if userID, ok := userIDVal.(string); ok && userID != "" {
@@ -86,6 +100,7 @@ func AuthRequiredMiddleware(cfg *config.Config) func(next http.Handler) http.Han
 				}
 			}
 
+			// if no ctx.userid - check cookie
 			cookie, err := r.Cookie("session_id")
 			if err != nil || cookie == nil {
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
@@ -96,6 +111,8 @@ func AuthRequiredMiddleware(cfg *config.Config) func(next http.Handler) http.Han
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
 				return
 			}
+
+			// add user ID to context
 			ctx := context.WithValue(r.Context(), contextkeys.UserIDKey, userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
