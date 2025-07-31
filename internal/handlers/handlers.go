@@ -257,7 +257,7 @@ func (h *Handler) GetUserURLsHandler(w http.ResponseWriter, r *http.Request) {
 	userIDVal := r.Context().Value(contextkeys.UserIDKey)
 	userID, ok := userIDVal.(string)
 	if !ok {
-		http.Error(w, "User ID not found in context", http.StatusInternalServerError)
+		http.Error(w, "User ID not found in context", http.StatusUnauthorized)
 		return
 	}
 
@@ -284,9 +284,10 @@ func (h *Handler) GetUserURLsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteURLsHandler(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value(contextkeys.UserIDKey).(string)
+	userIDVal := r.Context().Value(contextkeys.UserIDKey)
+	userID, ok := userIDVal.(string)
 	if !ok {
-		http.Error(w, "User ID not found", http.StatusUnauthorized)
+		http.Error(w, "User ID not found in context", http.StatusUnauthorized)
 		return
 	}
 

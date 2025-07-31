@@ -49,11 +49,11 @@ func NewPgStorage(dsn string) (*PGStorage, error) {
 		return nil, fmt.Errorf("failed to create table urls: %w", err)
 	}
 
-	s := PGStorage{db: db, deleteChan: make(chan deleteRequest, 100)}
+	s := &PGStorage{db: db, deleteChan: make(chan deleteRequest, 100)}
 
 	go s.asyncDelete()
 
-	return &PGStorage{db: db}, nil
+	return s, nil
 }
 
 func (s *PGStorage) asyncDelete() {
